@@ -5,33 +5,33 @@ using UnityEngine.UI;
 namespace HalfGripTools
 {
 	/// <summary>
-	/// The key-and-folder button in the main menu, one slot above the language flag. It is a copy of the game's own Settings button
+	/// The puzzle-piece button in the main menu, one slot above the language flag. It is a copy of the game's own Settings button
 	/// (so it looks, presses and sounds like the others) with another picture and another click.
 	/// </summary>
 	internal static class MenuButton
 	{
 		private const string ButtonName = "HalfGripToolsButton";
 
-		// 16x17 pixels, the size of the flags. k outline, y/o/O folder (light, mid, shade), w/g key (light, shade).
+		// 16x17 pixels, the size of the flags. Dark tile like the Settings button (d, D shade), orange puzzle piece (y light, o mid, O shade).
 		private static readonly string[] Pixels =
 		{
-			"......kkkkkkk...",
-			"......kwwwwwk...",
-			"......kw...wk...",
-			"......kw...wk...",
-			"kkkkkkkgggggk...",
-			"kyyyyykkkkkkk...",
-			"kkkkkkkkkwgk....",
-			"kyyyyyyykwgk....",
-			"kyooooookwgk....",
-			"kyooooookwgkkk..",
-			"kyooooookwgwwgk.",
-			"kyooooookwggggk.",
-			"kyooooookwgkkk..",
-			"kyooooookwgwwgk.",
-			"kyooooookwggggk.",
-			"kOOOOOOOkwgkkk..",
-			"kkkkkkkkkkkk...."
+			"...dddddddddd...",
+			"dddddyOddddddddd",
+			"ddddyyoOdddddddd",
+			"ddddyyoOdddddddd",
+			"dyyyyyyyyyyddddd",
+			"dyooooooooOddddd",
+			"dyooooooooOyyydd",
+			"dddoooooooooooOd",
+			"dddoooooooooooOd",
+			"dddoooooooooooOd",
+			"dyooooooooOOOOdd",
+			"dyooooooooOddddd",
+			"dyooooooooOddddd",
+			"dyooodddooOddddd",
+			"dyOOOdddOOOddddd",
+			".dddddddddddddd.",
+			"...DDDDDDDDDD..."
 		};
 
 		private static GameObject button;
@@ -94,13 +94,19 @@ namespace HalfGripTools
 				return icon;
 			}
 			Color32 clear = new Color32(0, 0, 0, 0);
-			Color32 outline = new Color32(27, 27, 31, 255);
-			Texture2D texture = new Texture2D(16, 17, TextureFormat.RGBA32, false)
+			// The button stretches the picture over its whole face, so the 16x17 art sits in a transparent margin to come out the size of the other icons.
+			const int padLeft = 2;
+			const int padBottom = 2;
+			int width = 21;
+			int height = 22;
+			Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
 			{
 				filterMode = FilterMode.Point,
 				wrapMode = TextureWrapMode.Clamp,
 				hideFlags = HideFlags.HideAndDontSave
 			};
+			Color32[] blank = new Color32[width * height];
+			texture.SetPixels32(blank);
 			for (int row = 0; row < Pixels.Length; row++)
 			{
 				for (int x = 0; x < 16; x++)
@@ -108,19 +114,18 @@ namespace HalfGripTools
 					Color32 color;
 					switch (Pixels[row][x])
 					{
-						case 'k': color = outline; break;
-						case 'y': color = new Color32(246, 207, 106, 255); break;
-						case 'o': color = new Color32(232, 163, 58, 255); break;
-						case 'O': color = new Color32(184, 116, 31, 255); break;
-						case 'w': color = new Color32(233, 233, 238, 255); break;
-						case 'g': color = new Color32(154, 154, 166, 255); break;
+						case 'd': color = new Color32(56, 56, 56, 255); break;
+						case 'D': color = new Color32(42, 41, 42, 255); break;
+						case 'y': color = new Color32(247, 196, 92, 255); break;
+						case 'o': color = new Color32(235, 154, 44, 255); break;
+						case 'O': color = new Color32(186, 108, 32, 255); break;
 						default: color = clear; break;
 					}
-					texture.SetPixel(x, Pixels.Length - 1 - row, color);
+					texture.SetPixel(padLeft + x, padBottom + Pixels.Length - 1 - row, color);
 				}
 			}
 			texture.Apply();
-			icon = Sprite.Create(texture, new Rect(0f, 0f, 16f, 17f), new Vector2(0.5f, 0.5f), 100f);
+			icon = Sprite.Create(texture, new Rect(0f, 0f, width, height), new Vector2(0.5f, 0.5f), 100f);
 			icon.hideFlags = HideFlags.HideAndDontSave;
 			return icon;
 		}

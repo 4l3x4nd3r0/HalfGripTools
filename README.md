@@ -95,7 +95,7 @@ If something is wrong, the log says which mod and why:
 
 ## Mod manager
 
-In the main menu there is a key and folder button, one slot above the language flag. It opens the mod manager. Esc or a click outside closes it.
+In the main menu there is a puzzle piece button, one slot above the language flag. It opens the mod manager. Esc or a click outside closes it.
 
 Each installed mod shows its version, author and state: `RUNNING`, `OFF`, `ERROR: ...` (did not compile, see the log) or `NEEDS <mod>`. The ON/OFF button switches it.
 
