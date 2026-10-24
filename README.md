@@ -38,7 +38,7 @@ Start the game once and quit. If `BepInEx\LogOutput.log` exists, it works.
 
 ### 2. HalfGripTools (once)
 
-Download `HalfGripTools-v1.0.0.zip` from the [releases page](../../releases/latest). Unzip it into the game folder, merge when asked about `BepInEx`. You get:
+Download `HalfGripTools-v1.0.1.zip` from the [releases page](../../releases/latest). Unzip it into the game folder, merge when asked about `BepInEx`. You get:
 
 ```
 BepInEx\plugins\HalfGripTools\
@@ -50,7 +50,7 @@ BepInEx\plugins\HalfGripTools\
 Optional check of the zip, in PowerShell:
 
 ```powershell
-Get-FileHash HalfGripTools-v1.0.0.zip -Algorithm SHA256
+Get-FileHash HalfGripTools-v1.0.1.zip -Algorithm SHA256
 ```
 
 Compare with `SHA256SUMS.txt` on the release page. More checks are under [Trust](#trust).
@@ -78,7 +78,7 @@ Start the game, quit, open `BepInEx\LogOutput.log`:
 [Info   :HalfGripTools] Hello Mod: compiled 1 files in 847 ms
 [Info   :Hello Mod] hello
 [Info   :HalfGripTools] Loaded Hello Mod 1.0.0
-[Info   :HalfGripTools] Loaded HalfGripTools 1.0.0 by 4l3x4nd3r with 1 mod(s)
+[Info   :HalfGripTools] Loaded HalfGripTools 1.0.1 by 4l3x4nd3r with 1 mod(s)
 ```
 
 The first start compiles every mod and takes a few seconds. The result is cached in `BepInEx\cache\HalfGripMods`, so later starts are fast. The cache is rebuilt when the mod, the game or HalfGripTools changes.
@@ -187,7 +187,7 @@ Expected hits:
 
 Run the same search over any mod you install. Mod authors should say in their README if a mod writes your save.
 
-`HalfGripTools.dll` is built deterministically: the same commit and the same game version give the same bytes. The commit is in the DLL's version (`1.0.0+<commit>`, see the file's Details tab). Check out the release's tag, build it yourself and compare hashes with the release. A hosted build service cannot do this for you, because the build needs the game's own DLL, which is not in the repo.
+`HalfGripTools.dll` is built deterministically: the same commit and the same game version give the same bytes. The commit is in the DLL's version (`1.0.1+<commit>`, see the file's Details tab). Check out the release's tag, build it yourself and compare hashes with the release. A hosted build service cannot do this for you, because the build needs the game's own DLL, which is not in the repo.
 
 ## Build
 
@@ -198,7 +198,7 @@ git clone https://github.com/4l3x4nd3r0/HalfGripTools.git
 cd HalfGripTools
 .\tools\build.ps1 -GameDir "C:\path\to\Half Grip Demo" -Install   # build, copy the loader into the game
 .\tools\check-mods.ps1 -ModsPath .\examples -GameDir "C:\path\to\Half Grip Demo"   # compile mods, no game start
-.\tools\package.ps1 -Version 1.0.0 -GameDir "C:\path\to\Half Grip Demo"            # release zip in release\
+.\tools\package.ps1 -Version 1.0.1 -GameDir "C:\path\to\Half Grip Demo"            # release zip in release\
 ```
 
 ## Write a mod

@@ -17,7 +17,7 @@ namespace HalfGripTools
 	{
 		public const string Guid = "halfgrip.tools";
 
-		public const string Version = "1.0.0";
+		public const string Version = "1.0.1";
 
 		public const string Author = "4l3x4nd3r";
 
