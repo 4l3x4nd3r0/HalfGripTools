@@ -1,0 +1,8 @@
+{
+  "id": "helloitems",
+  "name": "Hello Items",
+  "version": "1.0.0",
+  "author": "4l3x4nd3r",
+  "description": "A mod with no code: one passive item, written as JSON.",
+  "gameVersion": "0.418"
+}

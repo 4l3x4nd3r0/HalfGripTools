@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>HalfGripTools</AssemblyName>
+    <RootNamespace>HalfGripTools</RootNamespace>
+    <LangVersion>10.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Same source and same game build give the same DLL, so anyone can rebuild it and compare the hash with the release. -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <PathMap>$(MSBuildThisFileDirectory)=/src/</PathMap>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <!-- JsonUtility fills the fields of the JSON classes by reflection, which the compiler cannot see. -->
+    <NoWarn>$(NoWarn);CS0649</NoWarn>
+
+    <!-- The game is only read from, never written to. Override with -p:GameDir=... if it moves. -->
+    <GameDir Condition="'$(GameDir)' == ''">F:\SteamLibrary\steamapps\common\Half Grip Demo</GameDir>
+    <ManagedDir>$(GameDir)\HalfGrip_Data\Managed</ManagedDir>
+    <BepInExCore>$(GameDir)\BepInEx\core</BepInExCore>
+
+    <OutDir>$(MSBuildThisFileDir)..\dist\BepInEx\plugins\HalfGripTools\</OutDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The compiler. Pinned to one version, so the DLLs a player downloads are the ones Microsoft published (signed). -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="EasyTextEffects">
+      <HintPath>$(ManagedDir)\EasyTextEffects.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="$(ManagedDir)\UnityEngine*.dll">
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="$(ManagedDir)\Unity.*.dll">
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExCore)\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCore)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

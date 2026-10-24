@@ -1,0 +1,11 @@
+{
+  "id": "helloitems.lucky_charm",
+  "name": "Lucky Charm",
+  "flavour": "Found it in the glovebox",
+  "tier": "Modified",
+  "cost": 60,
+  "statBoosts": [
+    { "stat": "MoneyPerKill", "amount": 0.25 },
+    { "stat": "MaxHp", "amount": 10, "addsToBase": true }
+  ]
+}
