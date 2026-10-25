@@ -27,6 +27,12 @@ namespace HalfGripTools
 		/// </summary>
 		public string gameVersion = "";
 
+		/// <summary>
+		/// The oldest HalfGripTools version the mod runs on, for example "1.0.2". Empty means any. A loader that is older than this
+		/// (and knows the field) does not load the mod and says why.
+		/// </summary>
+		public string tools = "";
+
 		internal string Folder;
 
 		internal string DisplayName => string.IsNullOrEmpty(name) ? id : name;
@@ -47,6 +53,7 @@ namespace HalfGripTools
 				description = MiniJson.String(obj, "description"),
 				requires = MiniJson.List(obj, "requires").OfType<string>().ToArray(),
 				gameVersion = MiniJson.String(obj, "gameVersion"),
+				tools = MiniJson.String(obj, "tools"),
 				Folder = folder
 			};
 		}

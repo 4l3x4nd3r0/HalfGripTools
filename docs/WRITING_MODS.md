@@ -26,7 +26,8 @@ MyMod\
   "author": "you",
   "description": "One sentence.",
   "requires": [],
-  "gameVersion": "0.418"
+  "gameVersion": "0.418",
+  "tools": "1.0.2"
 }
 ```
 
@@ -36,6 +37,8 @@ MyMod\
 | `name`, `version`, `author`, `description` | Shown in the log and in the mod manager. Keep `name` under about 28 characters, the list cuts it. |
 | `requires` | Ids of mods that must load first. If one is missing or off, your mod is skipped. |
 | `gameVersion` | Game version you made it for. `"0.418"` is exactly 0.418. `"0.x"` is any 0.something. `x` must be a whole part, `0.4x` does not work. |
+
+| `tools` | Optional. The oldest HalfGripTools version the mod runs on, for example `"1.0.2"`. A loader older than that which knows this field skips the mod and logs "needs HalfGripTools 1.0.2 or newer". (1.0.1 and older do not know the field: a mod that uses `ctx.Keys` should check for it itself, see below.) |
 
 A mod whose `gameVersion` does not match the running game still loads. The mod manager shows a warning sign next to it and the line "might not work correctly". Empty or missing `gameVersion` never warns.
 
@@ -125,6 +128,7 @@ Compile it without starting the game: `.\tools\check-mods.ps1 -ModsPath .\exampl
 | `OnUnload(callback)` | Runs when mods switch off (speedrun mode). |
 | `Sprites` | `LoadSprite(file, like, ppuOverride)` makes a sprite from `sprites\<file>` with the pivot and pixel density of the game sprite `like`. `LoadTexture(file)` returns a point-filtered texture. `Reskin(map, ppu)` swaps sprites by name in the scene. |
 | `Items` | See below. |
+| `Keys` | Adds keys to Settings > Controls (since 1.0.2). See below. |
 
 Also public: `VoxelMesh.Build` and `VoxelMesh.MakeObject` (turn a sprite into the thin 3D mesh the game uses for a held gun), and `GunConversion.CopyFields` (copy serialized fields between components). The RPG and SniperRifle mods use both.
 
@@ -146,6 +150,24 @@ ctx.Items.Add("mymod.thing", catalog =>
 - `Clone(basis, id)`: copy of an existing item. `FirstOf<T>(catalog, where)`: first catalog item of exactly that type. `Get(id)`: your item once made.
 
 Every item here starts as a copy of a game item with new numbers. That gives you the game's card, stat lines and save handling for free. Item fields are in [GAME_NOTES.md](GAME_NOTES.md).
+
+### Keys in Settings > Controls
+
+```csharp
+ModKey scope = ctx.Keys.Add(KeyCode.Z, "Scope in / out", Controls.Section.Looking);
+...
+if (scope != null && scope.Down) { ... }     // follows the player's rebind
+string hint = "Press " + scope.Name;          // "Z", or whatever they bound
+```
+
+`Add(key, label, section = Controls.Section.Race, shown = null)` puts a row in the game's own Controls list, with its rebind button, its "Default" button and its swap-with-whatever-holds-that-key behaviour. The player's choice is saved by the game. It returns null (with a warning in the log) if the default key already belongs to the game or another mod. Avoid `Controls.Section.Cheats`: those rows only show with cheats on.
+
+- `Down` and `Held` read the key through the game's input, so they are false while the game has input muted (pause menu, popups).
+- `DownRaw` is true on the frame the key goes down even then, for a mod that mutes input itself.
+- Item text goes through the game's `Controls.Keys`, so `{Z}` in a description prints the key the player bound to Z.
+- Keys are taken out of the list when mods switch off.
+
+`ctx.Keys` does not exist before 1.0.2, so a mod that must still compile on an older loader reads it by reflection (`ctx.GetType().GetProperty("Keys")`) and says what is wrong when it is missing. The SniperRifle and Multiplayer mods do this (`ModKeyShim.cs`).
 
 ## Mod manager
 

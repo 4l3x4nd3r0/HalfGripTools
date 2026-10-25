@@ -74,7 +74,13 @@ namespace HalfGripTools
 			foreach (ModEntry entry in entries)
 			{
 				ModManifest manifest = entry.Manifest;
-				if (!ModStore.IsEnabled(manifest.id))
+				if (NeedsNewerTools(manifest))
+				{
+					entry.Status = ModStatus.Failed;
+					entry.Detail = $"needs HalfGripTools {manifest.tools} or newer, this is {Plugin.Version}";
+					log.LogError($"{manifest.DisplayName} {entry.Detail}. Skipped.");
+				}
+				else if (!ModStore.IsEnabled(manifest.id))
 				{
 					entry.Status = ModStatus.Off;
 					log.LogInfo($"{manifest.DisplayName} is switched off in the mod manager");
@@ -98,6 +104,13 @@ namespace HalfGripTools
 					log.LogError($"{entry.Manifest.DisplayName} failed to load and is off: {e}");
 				}
 			}
+		}
+
+		private static bool NeedsNewerTools(ModManifest manifest)
+		{
+			Version needed;
+			Version have;
+			return Version.TryParse(manifest.tools, out needed) && Version.TryParse(Plugin.Version, out have) && have < needed;
 		}
 
 		private static List<ModManifest> Discover(ManualLogSource log)
