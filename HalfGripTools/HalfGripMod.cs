@@ -57,6 +57,9 @@ namespace HalfGripTools
 		/// <summary>Registers items in the game's catalog.</summary>
 		public ModItems Items { get; }
 
+		/// <summary>Adds keys to the game's Settings > Controls list.</summary>
+		public ModKeys Keys { get; }
+
 		internal ModContext(ModManifest manifest, ManualLogSource log)
 		{
 			Manifest = manifest;
@@ -66,6 +69,7 @@ namespace HalfGripTools
 			Harmony = new Harmony("halfgrip.mod." + manifest.id);
 			Sprites = new SpriteLoader(Path.Combine(Folder, "sprites"), log);
 			Items = new ModItems(this);
+			Keys = new ModKeys(this);
 		}
 
 		/// <summary>
@@ -128,6 +132,7 @@ namespace HalfGripTools
 				Log.LogError("Unpatch failed: " + e.Message);
 			}
 			Items.RemoveAll();
+			Keys.RemoveAll();
 		}
 	}
 }
