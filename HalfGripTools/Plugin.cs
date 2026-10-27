@@ -17,7 +17,7 @@ namespace HalfGripTools
 	{
 		public const string Guid = "halfgrip.tools";
 
-		public const string Version = "1.0.2";
+		public const string Version = "1.0.3";
 
 		public const string Author = "4l3x4nd3r";
 
@@ -38,6 +38,8 @@ namespace HalfGripTools
 			// These two only react to speedrun mode; they change nothing else in the game.
 			PatchSafely(typeof(SpeedrunModePatch));
 			PatchSafely(typeof(SpeedrunBeginRunPatch));
+			// Adds the mod list to the anonymous run stats; before the speedrun check so a speedrun run says "mods":[].
+			PatchSafely(typeof(RunStatsPatch));
 
 			speedrunAtStart = SpeedrunGuard.IsOnOrUnknown(Log);
 			if (speedrunAtStart)
