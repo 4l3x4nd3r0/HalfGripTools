@@ -17,7 +17,7 @@ namespace HalfGripTools
 	{
 		public const string Guid = "halfgrip.tools";
 
-		public const string Version = "1.0.3";
+		public const string Version = "1.0.4";
 
 		public const string Author = "4l3x4nd3r";
 
@@ -48,6 +48,7 @@ namespace HalfGripTools
 				return;
 			}
 
+			PatchSafely(typeof(ControlsListPatch));
 			PatchSafely(typeof(UpgradeMapperAwakePatch));
 			PatchSafely(typeof(LoadoutApplyPatch));
 			SceneManager.sceneLoaded += OnSceneLoaded;
