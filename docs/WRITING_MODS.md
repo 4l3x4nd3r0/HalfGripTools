@@ -25,6 +25,7 @@ MyMod\
   "version": "1.0.0",
   "author": "you",
   "description": "One sentence.",
+  "icon": "icon.png",
   "requires": [],
   "gameVersion": "0.418",
   "tools": "1.0.2"
@@ -37,7 +38,7 @@ MyMod\
 | `name`, `version`, `author`, `description` | Shown in the log and in the mod manager. Keep `name` under about 28 characters, the list cuts it. |
 | `requires` | Ids of mods that must load first. If one is missing or off, your mod is skipped. |
 | `gameVersion` | Game version you made it for. `"0.418"` is exactly 0.418. `"0.x"` is any 0.something. `x` must be a whole part, `0.4x` does not work. |
-
+| `icon` | Optional. A picture of the mod: a `.png` inside the mod's folder, for example `"icon.png"`. The mod manager shows it next to the name (1.0.5 and newer) and installers show it on the mod's card. Use a square image, 128x128 is plenty; pixel art stays sharp. It is only a picture: the sprites of your items in `sprites\` are separate. A missing file, or a path that leaves the folder, is ignored. |
 | `tools` | Optional. The oldest HalfGripTools version the mod runs on, for example `"1.0.2"`. A loader older than that which knows this field skips the mod and logs "needs HalfGripTools 1.0.2 or newer". (1.0.1 and older do not know the field: a mod that uses `ctx.Keys` should check for it itself, see below.) |
 
 A mod whose `gameVersion` does not match the running game still loads. The mod manager shows a warning sign next to it and the line "might not work correctly". Empty or missing `gameVersion` never warns.
