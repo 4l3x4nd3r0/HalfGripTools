@@ -33,6 +33,13 @@ namespace HalfGripTools
 		/// </summary>
 		public string tools = "";
 
+		/// <summary>
+		/// A picture for the mod, shown in the mod manager (and in installers): a PNG inside the mod's folder, for example "icon.png".
+		/// It is only a picture; the game's own sprites for the mod's items are separate. Empty, a missing file or a path that leaves the
+		/// folder means no picture.
+		/// </summary>
+		public string icon = "";
+
 		internal string Folder;
 
 		internal string DisplayName => string.IsNullOrEmpty(name) ? id : name;
@@ -54,8 +61,21 @@ namespace HalfGripTools
 				requires = MiniJson.List(obj, "requires").OfType<string>().ToArray(),
 				gameVersion = MiniJson.String(obj, "gameVersion"),
 				tools = MiniJson.String(obj, "tools"),
+				icon = MiniJson.String(obj, "icon"),
 				Folder = folder
 			};
+		}
+
+		/// <summary>The full path of the icon, or null when there is none: it must be a .png that sits inside the mod's own folder.</summary>
+		internal string IconPath()
+		{
+			if (string.IsNullOrEmpty(icon) || string.IsNullOrEmpty(Folder) || !icon.EndsWith(".png", StringComparison.OrdinalIgnoreCase) || System.IO.Path.IsPathRooted(icon))
+			{
+				return null;
+			}
+			string root = System.IO.Path.GetFullPath(Folder).TrimEnd('\\', '/') + System.IO.Path.DirectorySeparatorChar;
+			string path = System.IO.Path.GetFullPath(System.IO.Path.Combine(Folder, icon));
+			return path.StartsWith(root, StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(path) ? path : null;
 		}
 	}
 }

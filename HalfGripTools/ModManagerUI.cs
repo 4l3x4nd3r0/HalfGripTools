@@ -267,21 +267,34 @@ namespace HalfGripTools
 
 			// A mod made for another game version gets a warning sign in front of its name and a line saying why.
 			float left = 24f;
+			Sprite picture = IconOf(manifest);
+			if (picture != null)
+			{
+				RectTransform frame = Box("Icon", row, new Color(0.055f, 0.055f, 0.07f, 1f));
+				Anchor(frame, new Vector2(0f, 1f), new Vector2(left, -11f), new Vector2(96f, 96f));
+				frame.GetComponent<Image>().raycastTarget = false;
+				RectTransform art = Box("Picture", frame, Color.white);
+				Stretch(art, 6f);
+				Image artImage = art.GetComponent<Image>();
+				artImage.sprite = picture;
+				artImage.preserveAspect = true;
+				artImage.raycastTarget = false;
+				left += 112f;
+			}
 			if (warn)
 			{
 				RectTransform sign = Box("Warning", row, Amber);
-				Anchor(sign, new Vector2(0f, 1f), new Vector2(24f, -16f), new Vector2(56f, 56f));
+				Anchor(sign, new Vector2(0f, 1f), new Vector2(left, -16f), new Vector2(56f, 56f));
 				TMP_Text mark = Label("Mark", sign, "!", 50, new Color(0.1f, 0.1f, 0.12f, 1f), TextAlignmentOptions.Center, Vector2.zero, Vector2.zero);
 				Stretch((RectTransform)mark.transform, 0f);
-				left = 96f;
+				left += 72f;
 			}
 			string by = string.IsNullOrEmpty(manifest.author) ? "" : "  by " + manifest.author;
 			Label("Name", row, manifest.DisplayName, 46, Color.white, TextAlignmentOptions.TopLeft, new Vector2(left, -10f), new Vector2(650f, 56f));
 			Label("Info", row, "v" + manifest.version + by, 30, Soft, TextAlignmentOptions.TopLeft, new Vector2(left, -64f), new Vector2(650f, 40f));
 			if (warn)
 			{
-				Label("VersionWarning", row, entry.VersionWarning, 30, Amber, TextAlignmentOptions.TopLeft, new Vector2(24f, -108f), new Vector2(1000f, 40f));
-			}
+				Label("VersionWarning", row, entry.VersionWarning, 30, Amber, TextAlignmentOptions.TopLeft, new Vector2(24f, -108f), new Vector2(1000f, 40f));			}
 
 			string status;
 			Color statusColor;
@@ -311,6 +324,43 @@ namespace HalfGripTools
 				ModStore.SetEnabled(captured.Manifest.id, !ModStore.IsEnabled(captured.Manifest.id));
 				Refresh();
 			}, topRight: true);
+		}
+
+		private static readonly Dictionary<string, Sprite> iconCache = new Dictionary<string, Sprite>();
+
+		/// <summary>The mod's own picture (its mod.json "icon"), read once and kept. Null if it has none or the file cannot be read.</summary>
+		private static Sprite IconOf(ModManifest manifest)
+		{
+			string path = manifest.IconPath();
+			if (path == null)
+			{
+				return null;
+			}
+			if (iconCache.TryGetValue(path, out Sprite cached) && cached != null)
+			{
+				return cached;
+			}
+			Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+			{
+				filterMode = FilterMode.Point,
+				wrapMode = TextureWrapMode.Clamp,
+				hideFlags = HideFlags.HideAndDontSave
+			};
+			try
+			{
+				if (!ImageConversion.LoadImage(texture, System.IO.File.ReadAllBytes(path)))
+				{
+					return null;
+				}
+			}
+			catch (Exception)
+			{
+				return null;
+			}
+			Sprite sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
+			sprite.hideFlags = HideFlags.HideAndDontSave;
+			iconCache[path] = sprite;
+			return sprite;
 		}
 
 		// ---------------------------------------------------------------- building blocks
