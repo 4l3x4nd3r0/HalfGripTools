@@ -60,6 +60,9 @@ namespace HalfGripTools
 		/// <summary>Adds keys to the game's Settings > Controls list.</summary>
 		public ModKeys Keys { get; }
 
+		/// <summary>Talks to the same mod on the other players' machines, and adds game modes, when the Multiplayer mod is installed (1.0.6 and newer). Does nothing without it.</summary>
+		public ModNet Net { get; }
+
 		internal ModContext(ModManifest manifest, ManualLogSource log)
 		{
 			Manifest = manifest;
@@ -70,6 +73,7 @@ namespace HalfGripTools
 			Sprites = new SpriteLoader(Path.Combine(Folder, "sprites"), log);
 			Items = new ModItems(this);
 			Keys = new ModKeys(this);
+			Net = new ModNet(this);
 		}
 
 		/// <summary>
@@ -133,6 +137,7 @@ namespace HalfGripTools
 			}
 			Items.RemoveAll();
 			Keys.RemoveAll();
+			Net.Shutdown();
 		}
 	}
 }

@@ -130,6 +130,7 @@ Compile it without starting the game: `.\tools\check-mods.ps1 -ModsPath .\exampl
 | `Sprites` | `LoadSprite(file, like, ppuOverride)` makes a sprite from `sprites\<file>` with the pivot and pixel density of the game sprite `like`. `LoadTexture(file)` returns a point-filtered texture. `Reskin(map, ppu)` swaps sprites by name in the scene. |
 | `Items` | See below. |
 | `Keys` | Adds keys to Settings > Controls (since 1.0.2). See below. |
+| `Net` | Messages to the other players of a Multiplayer room, and game modes (since 1.0.6). See below. |
 
 Also public: `VoxelMesh.Build` and `VoxelMesh.MakeObject` (turn a sprite into the thin 3D mesh the game uses for a held gun), and `GunConversion.CopyFields` (copy serialized fields between components). The RPG and SniperRifle mods use both.
 
@@ -169,6 +170,54 @@ string hint = "Press " + scope.Name;          // "Z", or whatever they bound
 - Keys are taken out of the list when mods switch off.
 
 `ctx.Keys` does not exist before 1.0.2, so a mod that must still compile on an older loader reads it by reflection (`ctx.GetType().GetProperty("Keys")`) and says what is wrong when it is missing. The SniperRifle and Multiplayer mods do this (`ModKeyShim.cs`).
+
+### Talking to other players, and game modes (since 1.0.6)
+
+`ctx.Net` carries bytes between your mod on one player's machine and your mod on the others', through the Multiplayer mod's room. It does not need Multiplayer to compile: without it `Net.Available` is false, `Net.InRoom` stays false and every send returns false, so a mod can use it without checking. Everybody in a room has the same mods (Multiplayer checks), so a message only reaches your own mod.
+
+```csharp
+public override void Load(ModContext ctx)
+{
+    ctx.Net.OnReceive((from, data) =>           // main thread
+    {
+        if (data.Length > 0 && data[0] == 1) { /* a gate was passed: data[1..] */ }
+    });
+    Net.PhaseChanged += phase => { if (phase == NetPhase.Racing) { /* the race started */ } };
+    Net.PlayerLeft += player => ctx.Log.LogInfo(player.Name + " left");
+}
+
+// anywhere later
+ctx.Net.Send(new byte[] { 1, 3 });                       // to every other player, reliable
+ctx.Net.Send(position, Net.Everyone, reliable: false);   // for things sent often
+ctx.Net.SendToHost(bytes);
+```
+
+| Member | Meaning |
+|---|---|
+| `ctx.Net.Send(data, to = Net.Everyone, reliable = true)` | Returns false when it was not sent: no room, or too big (`Net.MaxReliable` 3800 bytes, `Net.MaxUnreliable` 1100). Send big things in parts. |
+| `ctx.Net.SendToHost(data, reliable = true)` | Does nothing on the host (the host runs its own code). |
+| `ctx.Net.OnReceive((from, data) => ...)` | `from` is the sender's player id. Called on the main thread. |
+| `ctx.Net.RegisterMode(new NetMode { ... })` | Adds a game mode to the MODE row of the race settings. See below. |
+| `Net.Available`, `InRoom`, `IsHost`, `LocalId`, `HostId`, `Players`, `Phase`, `ModeId` | The room as it is now. `ModeId` is `"race"`, `"demolition"`, `"tournament"`, `"custom"` or the id of a registered mode. |
+| `Net.PlayerJoined`, `PlayerLeft`, `PhaseChanged`, `ModesChanged` | Events. `PlayerJoined` also fires for each player already there when you join. |
+| `Net.EndRace()` | The host's call: ends the race for everybody and shows the results. |
+
+**Game modes.** Multiplayer has a CUSTOM mode of its own: up to 20 racers and up to 100 laps. A mod that wants other numbers, or its own grid, registers a mode:
+
+```csharp
+ctx.Net.RegisterMode(new NetMode
+{
+    Id = "mymod.hotlap",                 // unique; the same on every machine
+    Name = "HOT LAP",                    // shown in the MODE row
+    MaxPlayers = 30,                     // 2 to 64 (Multiplayer takes at most 64); the default is 20
+    MaxLaps = 5,                         // 1 to 100; the default is 100
+    SpawnPoint = i => i < 30 ? new Pose(MyGridPosition(i), MyGridRotation) : (Pose?)null   // optional
+});
+```
+
+The host picks it like any other mode. Every mode is run as a race (laps, finish line, results); the mod adds its own rules over `ctx.Net`, and `Net.EndRace()` ends the race early. `SpawnPoint(i)` is asked on every machine for car number `i` (0 is the first on the grid) and must give the same answer everywhere; return null to use the track's own grid, which continues behind the start line, along the racing line, past its six spots. More than about 20 players is slow: every car is sent to every player.
+
+If the host changes to a mode that takes fewer players than the room has, the players who joined last start the race as spectators.
 
 ## Mod manager
 
