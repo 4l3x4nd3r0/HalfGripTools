@@ -28,6 +28,12 @@ namespace HalfGripTools
 
 		internal string Detail = "";
 
+		/// <summary>The first compile errors (file, line, message) or the exception that stopped the mod, for the mod manager. The log has the rest.</summary>
+		internal readonly List<string> Errors = new List<string>();
+
+		/// <summary>Where the mod was found: 0 is the first. This is the load order, apart from <c>requires</c>, which always puts a mod after what it needs.</summary>
+		internal int Index;
+
 		/// <summary>Set when the mod says it was made for another game version than this one. The mod manager shows it as a warning.</summary>
 		internal string VersionWarning = "";
 	}
@@ -51,18 +57,55 @@ namespace HalfGripTools
 
 		internal static string ModsFolder => Path.Combine(BepInEx.Paths.BepInExRootPath, "HalfGripMods");
 
+		/// <summary>Extra folders to read mods from, separated by ';' (the loader's own setting). Set before <see cref="LoadAll"/>.</summary>
+		internal static string ExtraFolders = "";
+
+		private static IReadOnlyList<string> cachedRoots;
+
+		/// <summary>The folders mods are read from, in the order that decides which copy of an id wins: the main folder first, then the extra ones as written.</summary>
+		internal static IReadOnlyList<string> Roots()
+		{
+			if (cachedRoots != null)
+			{
+				return cachedRoots;
+			}
+			List<string> roots = new List<string> { Path.GetFullPath(ModsFolder) };
+			foreach (string part in (ExtraFolders ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
+			{
+				string trimmed = part.Trim().Trim('"');
+				if (trimmed == "")
+				{
+					continue;
+				}
+				string full = Path.GetFullPath(trimmed);
+				if (!Directory.Exists(full))
+				{
+					Plugin.Log.LogWarning($"Extra mod folder '{full}' does not exist and is ignored");
+				}
+				else if (!roots.Contains(full, StringComparer.OrdinalIgnoreCase))
+				{
+					roots.Add(full);
+				}
+			}
+			cachedRoots = roots;
+			return roots;
+		}
+
 		internal static void LoadAll(ManualLogSource log)
 		{
 			Running = true;
 			Directory.CreateDirectory(ModsFolder);
 			ModStore.Load();
-			foreach (ModManifest manifest in Discover(log).OrderBy(m => m.DisplayName, StringComparer.OrdinalIgnoreCase))
+			// Index = place in the load order. The mod manager lists by name, the loader loads by Index.
+			foreach (var item in Discover(log).Select((m, i) => new { m, i }).OrderBy(x => x.m.DisplayName, StringComparer.OrdinalIgnoreCase))
 			{
-				entries.Add(new ModEntry { Manifest = manifest });
+				entries.Add(new ModEntry { Manifest = item.m, Index = item.i });
 			}
-			log.LogInfo($"Found {entries.Count} mod(s) in {ModsFolder}. Game version {GameVersion.Current}");
+			log.LogInfo($"Found {entries.Count} mod(s) in {string.Join("; ", Roots())}. Game version {GameVersion.Current}");
 			foreach (ModEntry entry in entries)
 			{
+				ModManifest m = entry.Manifest;
+				log.LogInfo($"  {m.id} {m.version}  kind={(m.kind == "" ? "-" : m.kind)} trust={m.trust} api={(m.apiVersion == "" ? "-" : m.apiVersion)} tags=[{string.Join(",", m.tags)}]");
 				if (!GameVersion.Matches(entry.Manifest.gameVersion, GameVersion.Current))
 				{
 					entry.VersionWarning = $"Made for game {entry.Manifest.gameVersion}, this is {GameVersion.Current}. It might not work correctly.";
@@ -91,7 +134,9 @@ namespace HalfGripTools
 				}
 			}
 
-			foreach (ModEntry entry in Order(candidates, log))
+			List<ModEntry> loadOrder = Order(candidates, log).ToList();
+			log.LogInfo("Load order: " + string.Join(", ", loadOrder.Select(e => e.Manifest.id)));
+			foreach (ModEntry entry in loadOrder)
 			{
 				try
 				{
@@ -100,7 +145,8 @@ namespace HalfGripTools
 				catch (Exception e)
 				{
 					entry.Status = ModStatus.Failed;
-					entry.Detail = e.Message;
+					entry.Detail = e.GetType().Name + ": " + e.Message;
+					entry.Errors.Add(entry.Detail);
 					log.LogError($"{entry.Manifest.DisplayName} failed to load and is off: {e}");
 				}
 			}
@@ -116,7 +162,7 @@ namespace HalfGripTools
 		private static List<ModManifest> Discover(ManualLogSource log)
 		{
 			List<ModManifest> found = new List<ModManifest>();
-			foreach (string dir in Directory.GetDirectories(ModsFolder))
+			foreach (string dir in Roots().SelectMany(root => Directory.GetDirectories(root).OrderBy(d => d, StringComparer.OrdinalIgnoreCase)))
 			{
 				string file = Path.Combine(dir, "mod.json");
 				if (!File.Exists(file))
@@ -126,15 +172,33 @@ namespace HalfGripTools
 				try
 				{
 					ModManifest manifest = ModManifest.FromJson(File.ReadAllText(file), dir);
+					foreach (string problem in manifest.CheckNewFields())
+					{
+						log.LogWarning($"{file}: {problem}");
+					}
 					if (string.IsNullOrEmpty(manifest.id) || manifest.id != manifest.id.ToLowerInvariant() || manifest.id.Any(c => !char.IsLetterOrDigit(c) && c != '-' && c != '_'))
 					{
 						log.LogError(file + ": 'id' must be lower case letters, digits, '-' or '_'. Skipped.");
 						continue;
 					}
-					if (found.Any(m => m.id == manifest.id))
+					// The first copy found keeps the id (load order: the main folder, then the extra folders as written, each by folder name).
+					// A later copy with the same files is ignored. One with different files is a different mod that picked the same id, so
+					// it gets a new id made from its own hash (stable: its config and its on/off setting stay with it between starts).
+					ModManifest first = found.FirstOrDefault(m => (m.OriginalId ?? m.id) == manifest.id);
+					if (first != null)
 					{
-						log.LogError($"{file}: id '{manifest.id}' is used twice. Skipped.");
-						continue;
+						string hash = ModHash.OfFolder(manifest.Folder);
+						ModManifest same = found.FirstOrDefault(m => (m.OriginalId ?? m.id) == manifest.id && ModHash.OfFolder(m.Folder) == hash);
+						if (same != null)
+						{
+							log.LogWarning($"{file}: same files as {same.Folder} (id '{manifest.id}'). Ignored.");
+							continue;
+						}
+						string original = manifest.id;
+						manifest.OriginalId = original;
+						manifest.id = original + "-" + hash.Substring(0, 6);
+						manifest.name = manifest.DisplayName + " (" + manifest.id + ")";
+						log.LogWarning($"{file}: id '{original}' is already used by {first.Folder} with different files. Loaded as '{manifest.id}'; mods that require '{original}' get the first one.");
 					}
 					found.Add(manifest);
 				}
@@ -150,7 +214,7 @@ namespace HalfGripTools
 		private static IEnumerable<ModEntry> Order(List<ModEntry> candidates, ManualLogSource log)
 		{
 			List<ModEntry> ordered = new List<ModEntry>();
-			List<ModEntry> waiting = candidates.OrderBy(e => e.Manifest.id, StringComparer.Ordinal).ToList();
+			List<ModEntry> waiting = candidates.OrderBy(e => e.Index).ToList();
 			while (waiting.Count > 0)
 			{
 				ModEntry next = waiting.FirstOrDefault(e => e.Manifest.requires.All(r => ordered.Any(o => o.Manifest.id == r)));
@@ -182,11 +246,11 @@ namespace HalfGripTools
 			HalfGripMod mod = null;
 			if (sources.Length > 0)
 			{
-				Assembly assembly = Compiler.Build(manifest, sources, log);
+				Assembly assembly = Compiler.Build(manifest, sources, log, entry.Errors);
 				if (assembly == null)
 				{
 					entry.Status = ModStatus.Failed;
-					entry.Detail = "does not compile (see the log)";
+					entry.Detail = entry.Errors.Count > 0 ? entry.Errors[0] : "does not compile (see the log)";
 					return;
 				}
 				ctx.Assembly = assembly;
@@ -195,6 +259,7 @@ namespace HalfGripTools
 				{
 					entry.Status = ModStatus.Failed;
 					entry.Detail = $"needs exactly one HalfGripMod class, found {entryPoints.Length}";
+					entry.Errors.Add(entry.Detail);
 					log.LogError($"{manifest.DisplayName}: expected exactly one class deriving from HalfGripMod, found {entryPoints.Length}. Skipped.");
 					return;
 				}

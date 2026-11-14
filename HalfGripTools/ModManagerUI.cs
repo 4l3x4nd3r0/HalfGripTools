@@ -263,7 +263,9 @@ namespace HalfGripTools
 
 			RectTransform row = Box("Row " + manifest.id, modContent, RowColor);
 			bool warn = entry.VersionWarning != "";
-			row.gameObject.AddComponent<LayoutElement>().preferredHeight = warn ? 156f : 118f;
+			// A mod that did not load shows its first errors (file, line, message) under its name, up to three lines.
+			int errorLines = entry.Status == ModStatus.Failed ? Mathf.Min(3, entry.Errors.Count) : 0;
+			row.gameObject.AddComponent<LayoutElement>().preferredHeight = (warn ? 156f : 118f) + errorLines * 36f;
 
 			// A mod made for another game version gets a warning sign in front of its name and a line saying why.
 			float left = 24f;
@@ -295,6 +297,11 @@ namespace HalfGripTools
 			if (warn)
 			{
 				Label("VersionWarning", row, entry.VersionWarning, 30, Amber, TextAlignmentOptions.TopLeft, new Vector2(24f, -108f), new Vector2(1000f, 40f));			}
+
+			for (int i = 0; i < errorLines; i++)
+			{
+				Label("Error" + i, row, entry.Errors[i], 26, Red, TextAlignmentOptions.TopLeft, new Vector2(24f, (warn ? -148f : -108f) - i * 36f), new Vector2(1300f, 36f));
+			}
 
 			string status;
 			Color statusColor;

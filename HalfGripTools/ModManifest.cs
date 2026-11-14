@@ -34,6 +34,24 @@ namespace HalfGripTools
 		public string tools = "";
 
 		/// <summary>
+		/// The same thing as <see cref="tools"/> under the name the official API will use: the oldest loader/API version the mod runs on.
+		/// Either field may be given; both end up holding the same text, so the loader reads one.
+		/// </summary>
+		public string apiVersion = "";
+
+		/// <summary>
+		/// "full" (the default: the whole game, Harmony, files) or "restricted" (the public API only, planned). Only recorded for now: a
+		/// restricted mod still runs with full access until the restricted compile mode exists.
+		/// </summary>
+		public string trust = "full";
+
+		/// <summary>What the mod is: "item", "map", "mode" or "library". Empty means not said. For lists and, later, Workshop.</summary>
+		public string kind = "";
+
+		/// <summary>Free words for finding the mod ("gun", "map", "cosmetic"). Lower case, no spaces.</summary>
+		public string[] tags = new string[0];
+
+		/// <summary>
 		/// A picture for the mod, shown in the mod manager (and in installers): a PNG inside the mod's folder, for example "icon.png".
 		/// It is only a picture; the game's own sprites for the mod's items are separate. Empty, a missing file or a path that leaves the
 		/// folder means no picture.
@@ -41,6 +59,9 @@ namespace HalfGripTools
 		public string icon = "";
 
 		internal string Folder;
+
+		/// <summary>The id written in mod.json, set only when another mod already had it and this copy was given a new id.</summary>
+		internal string OriginalId;
 
 		internal string DisplayName => string.IsNullOrEmpty(name) ? id : name;
 
@@ -51,7 +72,11 @@ namespace HalfGripTools
 			{
 				throw new FormatException("mod.json must be a JSON object");
 			}
-			return new ModManifest
+			string tools = MiniJson.String(obj, "tools");
+			string api = MiniJson.String(obj, "apiVersion");
+			// One value for both names. If a mod gives both, the newer one counts, so neither can let it run on a loader that is too old.
+			string needed = tools == "" ? api : api == "" ? tools : (Version.TryParse(api, out Version a) && Version.TryParse(tools, out Version t) && a > t ? api : tools);
+			ModManifest manifest = new ModManifest
 			{
 				id = MiniJson.String(obj, "id"),
 				name = MiniJson.String(obj, "name"),
@@ -60,10 +85,44 @@ namespace HalfGripTools
 				description = MiniJson.String(obj, "description"),
 				requires = MiniJson.List(obj, "requires").OfType<string>().ToArray(),
 				gameVersion = MiniJson.String(obj, "gameVersion"),
-				tools = MiniJson.String(obj, "tools"),
+				tools = needed,
+				apiVersion = needed,
+				trust = MiniJson.String(obj, "trust", "full"),
+				kind = MiniJson.String(obj, "kind"),
+				tags = MiniJson.List(obj, "tags").OfType<string>().ToArray(),
 				icon = MiniJson.String(obj, "icon"),
 				Folder = folder
 			};
+			return manifest;
+		}
+
+		internal static readonly string[] Trusts = { "full", "restricted" };
+
+		internal static readonly string[] Kinds = { "item", "map", "mode", "library" };
+
+		/// <summary>
+		/// What is wrong with the new fields, one sentence each. None of it stops the mod: an unknown value is put back to the default, so
+		/// a mod made for a later loader that knows more words still runs here.
+		/// </summary>
+		internal List<string> CheckNewFields()
+		{
+			List<string> problems = new List<string>();
+			string trustWas = trust.ToLowerInvariant();
+			if (!Trusts.Contains(trustWas))
+			{
+				problems.Add($"'trust' is '{trust}', not one of {string.Join(", ", Trusts)}; using 'full'");
+				trustWas = "full";
+			}
+			trust = trustWas;
+			string kindWas = kind.ToLowerInvariant();
+			if (kindWas != "" && !Kinds.Contains(kindWas))
+			{
+				problems.Add($"'kind' is '{kind}', not one of {string.Join(", ", Kinds)}; leaving it empty");
+				kindWas = "";
+			}
+			kind = kindWas;
+			tags = tags.Select(t => t.Trim().ToLowerInvariant().Replace(' ', '-')).Where(t => t != "").Distinct().ToArray();
+			return problems;
 		}
 
 		/// <summary>The full path of the icon, or null when there is none: it must be a .png that sits inside the mod's own folder.</summary>

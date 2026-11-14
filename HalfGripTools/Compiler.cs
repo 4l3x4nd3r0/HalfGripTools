@@ -24,7 +24,7 @@ namespace HalfGripTools
 		private static string gameHash;
 
 		/// <summary>Returns the compiled mod, or null (with the errors logged) if it does not compile.</summary>
-		internal static Assembly Build(ModManifest manifest, string[] sourceFiles, ManualLogSource log)
+		internal static Assembly Build(ModManifest manifest, string[] sourceFiles, ManualLogSource log, List<string> errors = null)
 		{
 			string cacheDir = Path.Combine(BepInEx.Paths.BepInExRootPath, "cache", "HalfGripMods");
 			Directory.CreateDirectory(cacheDir);
@@ -59,6 +59,10 @@ namespace HalfGripTools
 					foreach (Diagnostic d in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Take(20))
 					{
 						log.LogError("  " + d);
+						if (errors != null && errors.Count < MaxShownErrors)
+						{
+							errors.Add(Describe(manifest, d));
+						}
 					}
 					return null;
 				}
@@ -71,6 +75,22 @@ namespace HalfGripTools
 				log.LogInfo($"{manifest.DisplayName}: compiled {sourceFiles.Length} files in {watch.ElapsedMilliseconds} ms");
 				return Assembly.Load(bytes);
 			}
+		}
+
+		/// <summary>How many compile errors are kept for the mod manager. The log has more.</summary>
+		internal const int MaxShownErrors = 5;
+
+		/// <summary>One error as <c>src\File.cs(12,5): CS1002 ; expected</c>, the path relative to the mod's folder, for people who read it in the game.</summary>
+		private static string Describe(ModManifest manifest, Diagnostic d)
+		{
+			FileLinePositionSpan span = d.Location.GetLineSpan();
+			string path = span.Path ?? "";
+			string root = Path.GetFullPath(manifest.Folder).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+			if (path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+			{
+				path = path.Substring(root.Length);
+			}
+			return $"{path}({span.StartLinePosition.Line + 1},{span.StartLinePosition.Character + 1}): {d.Id} {d.GetMessage()}";
 		}
 
 		private static List<MetadataReference> References(ManualLogSource log)

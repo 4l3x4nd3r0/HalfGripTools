@@ -9,7 +9,7 @@ namespace HalfGripTools
 {
 	/// <summary>
 	/// Adds the enabled mods to the game's anonymous run stats, so the developers can count runs with mods. <c>RunStats.Fit</c> returns the JSON
-	/// text that is stored and uploaded; this inserts <c>"mods":["Name@version",...]</c> before its closing brace. Loaded with the loader even
+	/// text that is stored and uploaded; this inserts <c>"mods":["id@version:hash8",...]</c> before its closing brace. Loaded with the loader even
 	/// in speedrun mode, where it sends <c>"mods":[]</c> because no mod is running. Any error leaves the text as the game made it.
 	/// </summary>
 	[HarmonyPatch]
@@ -88,7 +88,8 @@ namespace HalfGripTools
 		{
 			foreach (ModContext mod in ModLoader.Mods.ToArray())
 			{
-				string entry = mod.Manifest.DisplayName + "@" + mod.Manifest.version;
+				// id@version:hash8, so a changed copy of a mod shows in the stats as a different entry.
+				string entry = mod.Manifest.id + "@" + mod.Manifest.version + ":" + ModHash.OfFolder(mod.Folder).Substring(0, 8);
 				yield return entry.Length > MaxEntryLength ? entry.Substring(0, MaxEntryLength) : entry;
 			}
 		}

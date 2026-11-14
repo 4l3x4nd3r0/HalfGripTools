@@ -36,6 +36,9 @@ namespace HalfGripTools
 
 		private static GameObject button;
 
+		/// <summary>True once the button is in the main menu, which is how the loader knows the player is looking at the menu.</summary>
+		internal static bool Attached => button != null;
+
 		private static Sprite icon;
 
 		/// <summary>Adds the button to the main menu if this scene has one and it is not there yet.</summary>

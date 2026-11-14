@@ -17,7 +17,7 @@ namespace HalfGripTools
 	{
 		public const string Guid = "halfgrip.tools";
 
-		public const string Version = "1.0.6";
+		public const string Version = "1.1.0";
 
 		public const string Author = "4l3x4nd3r";
 
@@ -52,6 +52,7 @@ namespace HalfGripTools
 			PatchSafely(typeof(UpgradeMapperAwakePatch));
 			PatchSafely(typeof(LoadoutApplyPatch));
 			SceneManager.sceneLoaded += OnSceneLoaded;
+			ModLoader.ExtraFolders = Config.Bind("General", "ExtraModFolders", "", "More folders to load mods from, separated by ';'. The normal BepInEx\\HalfGripMods folder is always read first; if the same mod id is in two folders the first one wins.").Value;
 			ModLoader.LoadAll(Log);
 			Log.LogInfo("Loaded HalfGripTools " + Version + " by " + Author + " with " + ModLoader.Mods.Count + " mod(s)");
 		}
@@ -68,6 +69,23 @@ namespace HalfGripTools
 			}
 		}
 
+		private bool failuresShown;
+
+		/// <summary>Once, when the main menu is up: a few lines naming the mods that did not load, so a broken mod is not found out from a log file.</summary>
+		private void ReportFailures()
+		{
+			if (failuresShown)
+			{
+				return;
+			}
+			failuresShown = true;
+			string[] bad = ModLoader.Entries.Where(e => e.Status == ModStatus.Failed || e.Status == ModStatus.NeedsOther).Select(e => e.Manifest.DisplayName).ToArray();
+			if (bad.Length > 0)
+			{
+				ToastBehaviour.Show($"{bad.Length} mod(s) did not load: {string.Join(", ", bad.Take(4))}{(bad.Length > 4 ? ", ..." : "")}. Open Mods to see why.");
+			}
+		}
+
 		private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
 		{
 			if (!ModLoader.Running)
@@ -76,6 +94,10 @@ namespace HalfGripTools
 			}
 			ItemInjector.InjectAll();
 			MenuButton.TryAttach();
+			if (MenuButton.Attached)
+			{
+				ReportFailures();
+			}
 			foreach (ModContext mod in ModLoader.Mods.ToArray())
 			{
 				foreach (Action<Scene> callback in mod.SceneCallbacks.ToArray())

@@ -78,7 +78,7 @@ Start the game, quit, open `BepInEx\LogOutput.log`:
 [Info   :HalfGripTools] Hello Mod: compiled 1 files in 847 ms
 [Info   :Hello Mod] hello
 [Info   :HalfGripTools] Loaded Hello Mod 1.0.0
-[Info   :HalfGripTools] Loaded HalfGripTools 1.0.6 by 4l3x4nd3r with 1 mod(s)
+[Info   :HalfGripTools] Loaded HalfGripTools 1.1.0 by 4l3x4nd3r with 1 mod(s)
 ```
 
 The first start compiles every mod and takes a few seconds. The result is cached in `BepInEx\cache\HalfGripMods`, so later starts are fast. The cache is rebuilt when the mod, the game or HalfGripTools changes.
@@ -91,6 +91,10 @@ If something is wrong, the log says which mod and why:
 | `Patch Y failed and is off` | One hook no longer fits the game. The rest of that mod works. |
 | `X: Made for game 0.417, this is 0.418...` | Version warning, see [Game version](#game-version). |
 | `X is switched off in the mod manager` | You turned it off. |
+| `...mod.json: same files as <folder> (id 'x'). Ignored.` | The same mod is in two folders. The first one found is loaded, the copy is ignored. |
+| `...id 'x' is already used by <folder> with different files. Loaded as 'x-1a2b3c'` | Two different mods picked the same id. The first one found keeps it. The other gets the id plus the start of its own hash, so its settings stay with it between starts. |
+| `Load order: a, b, c` | The order the mods load in: the main folder first, then the extra folders as written, each by folder name. A mod that `requires` another always comes after it. |
+| `...mod.json: 'trust' is 'y', not one of ...` | An unknown word in `trust` or `kind`. The default is used and the mod still loads. |
 | `Speedrun mode is on: no mods are loaded` | See [Speedrun mode](#speedrun-mode). |
 
 ## Mod manager
@@ -152,6 +156,8 @@ Not undone by a switch-off: anything a mod wrote to your save, and items already
 ## Settings, update, remove
 
 - Settings: each code mod writes `BepInEx\config\halfgrip.<mod id>.cfg` on first run, for example `halfgrip.hellomod.cfg`. Every entry has a comment. Edit with the game closed.
+- HalfGripTools has one setting of its own, in `BepInEx\config\halfgrip.tools.cfg`: `ExtraModFolders`, more folders to read mods from, separated by `;`. `BepInEx\HalfGripMods` is always read first; if the same mod id is in two folders, the first one is used and the other is reported in the log.
+- When a mod does not compile, the mod manager shows the file, line and message under its name, and the main menu shows a short note naming the mods that did not load.
 - Update a mod or HalfGripTools: replace the folder. A changed mod recompiles at the next start.
 - Remove a mod: delete its folder, or switch it off in the manager.
 - Remove all mods: delete `BepInEx\plugins\HalfGripTools`. To remove BepInEx too, delete `winhttp.dll`, `doorstop_config.ini`, `.doorstop_version` and `BepInEx`.
@@ -187,7 +193,7 @@ Expected hits:
 
 Run the same search over any mod you install. Mod authors should say in their README if a mod writes your save.
 
-`HalfGripTools.dll` is built deterministically: the same commit and the same game version give the same bytes. The commit is in the DLL's version (`1.0.6+<commit>`, see the file's Details tab). Check out the release's tag, build it yourself and compare hashes with the release. A hosted build service cannot do this for you, because the build needs the game's own DLL, which is not in the repo.
+`HalfGripTools.dll` is built deterministically: the same commit and the same game version give the same bytes. The commit is in the DLL's version (`1.1.0+<commit>`, see the file's Details tab). Check out the release's tag, build it yourself and compare hashes with the release. A hosted build service cannot do this for you, because the build needs the game's own DLL, which is not in the repo.
 
 ## Build
 
@@ -198,7 +204,8 @@ git clone https://github.com/4l3x4nd3r0/HalfGripTools.git
 cd HalfGripTools
 .\tools\build.ps1 -GameDir "C:\path\to\Half Grip Demo" -Install   # build, copy the loader into the game
 .\tools\check-mods.ps1 -ModsPath .\examples -GameDir "C:\path\to\Half Grip Demo"   # compile mods, no game start
-.\tools\package.ps1 -Version 1.0.6 -GameDir "C:\path\to\Half Grip Demo"            # release zip in release\
+.\tools\hook-census.ps1 -ModsPath .\examples -Out census.md -GameDir "C:\path\to\Half Grip Demo"   # which game members a set of mods uses, patches and reflects on
+.\tools\package.ps1 -Version 1.1.0 -GameDir "C:\path\to\Half Grip Demo"            # release zip in release\
 ```
 
 ## Write a mod

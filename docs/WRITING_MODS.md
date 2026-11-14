@@ -28,7 +28,10 @@ MyMod\
   "icon": "icon.png",
   "requires": [],
   "gameVersion": "0.418",
-  "tools": "1.0.2"
+  "apiVersion": "1.1.0",
+  "kind": "item",
+  "trust": "full",
+  "tags": ["gun"]
 }
 ```
 
@@ -40,6 +43,15 @@ MyMod\
 | `gameVersion` | Game version you made it for. `"0.418"` is exactly 0.418. `"0.x"` is any 0.something. `x` must be a whole part, `0.4x` does not work. |
 | `icon` | Optional. A picture of the mod: a `.png` inside the mod's folder, for example `"icon.png"`. The mod manager shows it next to the name (1.0.5 and newer) and installers show it on the mod's card. Use a square image, 128x128 is plenty; pixel art stays sharp. It is only a picture: the sprites of your items in `sprites\` are separate. A missing file, or a path that leaves the folder, is ignored. |
 | `tools` | Optional. The oldest HalfGripTools version the mod runs on, for example `"1.0.2"`. A loader older than that which knows this field skips the mod and logs "needs HalfGripTools 1.0.2 or newer". (1.0.1 and older do not know the field: a mod that uses `ctx.Keys` should check for it itself, see below.) |
+
+| `apiVersion` | The same as `tools`, under the name the official API will use (1.1.0 and newer). Give either one. If a mod gives both, the newer counts. |
+| `kind` | Optional. `item`, `map`, `mode` or `library`. For lists and, later, Steam Workshop. An unknown word is logged and ignored. |
+| `trust` | `full` (the default) or `restricted`. **Only recorded for now: a `restricted` mod still runs with full access.** It is there so the label is in the mod from the start. When the restricted compile mode exists, `restricted` will mean: the public API only (no `Assembly-CSharp`, Harmony, BepInEx), no files or network except through `ctx.Storage`, checked against an allow-list before the mod runs. An unknown word is logged and counted as `full`. |
+| `tags` | Optional list of words for finding the mod (`"gun"`, `"map"`). Lower case; spaces become `-`. |
+
+The log shows `id version kind trust api tags` for every mod at start.
+
+To read the list of running mods from code (1.1.0 and newer) use `LoadedMods.All`: for each mod its `Id`, `Version`, `Hash` (SHA-256 of the mod's folder, the same on every PC with the same files), `Folder`, `Kind`, `Trust`, and `Line` (`id@version:hash8`, what the run stats and rooms use). The hash ignores a `lang\` folder and editor files (`*.csproj`, `bin\`, `obj\`, `.gitignore`). Do not reach into the loader's internal classes for this.
 
 A mod whose `gameVersion` does not match the running game still loads. The mod manager shows a warning sign next to it and the line "might not work correctly". Empty or missing `gameVersion` never warns.
 
