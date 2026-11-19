@@ -97,6 +97,26 @@ Stats: `NitroPower`, `NitroCharge`, `NitroDuration`, `SlowMoStrength`, `SlowMoDu
 
 A mistake in a file (bad JSON, unknown stat or tier, no id) is logged with the file name and position. Only that item is skipped.
 
+### Copying a game item and changing its numbers
+
+Add `"copyOf": "<id of a game item>"` to start from that item instead of a plain passive, and `"fields"` to change public fields of the copy by name. Numbers, `true`/`false`, text and the names of an enum are accepted; sprites, curves and lists are refused with a line in the log. The loader logs every field it set, and warns about one that does not exist.
+
+```json
+{
+  "id": "tractordiesel.engine",
+  "name": "Tractor Diesel",
+  "copyOf": "engine_1",
+  "tier": "RaceSpec",
+  "cost": 30,
+  "fields": { "speedMultiplier": 92, "engineAccel": 12.5 },
+  "statBoosts": [ { "stat": "RamDamage", "amount": 0.40 } ]
+}
+```
+
+An engine's fields are `speedMultiplier`, `engineAccel`, `asr`; a tire's are `tireGrip`, `loadSensitivity` (`NONE`, `SPIKED`, `SENSITIVE`), `abs`, `brakeFromGrip`, `brakeBias`. The `Tractor Diesel`, `Spiked Tires` and `Charm Pack` folders in the sandbox are working examples.
+
+In `statBoosts` a stat whose base is 0 in the game (money a race, lifesteal) needs `"addsToBase": true` and a flat amount; most others take a fraction (0.1 = +10%). The game works out `(base + flat) x (1 + sum of fractions) x product of multipliers`.
+
 ## A mod with code
 
 Put one class that derives from `HalfGripMod` in `src\`. Other `.cs` files can sit next to it. Language: C# 10.

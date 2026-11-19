@@ -68,6 +68,12 @@ namespace HalfGripTools
 		/// <summary>Talks to the same mod on the other players' machines, and adds game modes, when the Multiplayer mod is installed (1.0.6 and newer). Does nothing without it.</summary>
 		public ModNet Net { get; }
 
+		/// <summary>Loads wav files from the mod's folder as clips (2.0).</summary>
+		public ModAudio Audio { get; }
+
+		/// <summary>Things that happen in the game (a race started, a lap done, a kill, a wreck, a shot) as C# events, so a simple mod needs no patch (2.0).</summary>
+		public ModEvents Events { get; }
+
 		/// <summary>Adds race maps built from code (<see cref="MapInfo"/>). A mod folder with a <c>maps</c> folder of map files needs no code at all.</summary>
 		public ModMaps Maps { get; }
 
@@ -83,6 +89,9 @@ namespace HalfGripTools
 			Keys = new ModKeys(this);
 			Net = new ModNet(this);
 			Maps = new ModMaps(this);
+			Events = new ModEvents(this);
+			Events.Join();
+			Audio = new ModAudio(this);
 		}
 
 		/// <summary>
@@ -139,6 +148,8 @@ namespace HalfGripTools
 			Keys.RemoveAll();
 			Net.Shutdown();
 			Maps.RemoveAll();
+			Events.RemoveAll();
+			Audio.Clear();
 		}
 	}
 }

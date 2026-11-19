@@ -79,6 +79,7 @@ namespace HalfGripTools
 				return;
 			}
 
+			EventHub.Start(home);
 			Install(() => PatchProvider?.InstallModHooks());
 			SceneManager.sceneLoaded += OnSceneLoaded;
 			MapLibrary.LoadUserMaps();
@@ -149,6 +150,7 @@ namespace HalfGripTools
 				}
 			}
 			MapRegistry.OnSceneLoaded(scene);
+			EventHub.SceneReady(scene);
 		}
 
 		/// <summary>The loader's own MonoBehaviour: one poll twice a second for the speedrun switch.</summary>

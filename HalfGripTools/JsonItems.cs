@@ -77,6 +77,75 @@ namespace HalfGripTools
 			return boosts;
 		}
 
+		/// <summary>Fields that would change what the item is, not how it behaves: they stay as the clone had them.</summary>
+		private static readonly HashSet<string> LockedFields = new HashSet<string> { "id", "name", "hideFlags" };
+
+		/// <summary>
+		/// <c>"fields": { "speedMultiplier": 92, "loadSensitivity": "SPIKED" }</c>: sets public fields of the cloned item by name. Numbers, true/false,
+		/// text and the names of an enum are accepted; anything else (sprites, curves, lists) is refused with a line in the log. Use <c>copyOf</c> to
+		/// start from the kind of item you want: an engine's fields on a clone of an engine, a tire's on a tire.
+		/// </summary>
+		private static void ApplyFields(ModContext ctx, string id, UpgradeComponent made, Dictionary<string, object> def)
+		{
+			Dictionary<string, object> fields = def.ContainsKey("fields") ? def["fields"] as Dictionary<string, object> : null;
+			if (fields == null)
+			{
+				return;
+			}
+			var done = new List<string>();
+			foreach (KeyValuePair<string, object> pair in fields)
+			{
+				System.Reflection.FieldInfo field = made.GetType().GetField(pair.Key, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+				if (field == null || LockedFields.Contains(pair.Key))
+				{
+					ctx.Log.LogWarning($"{id}: {made.GetType().Name} has no field '{pair.Key}' that can be set from JSON, so it is left as it was.");
+					continue;
+				}
+				try
+				{
+					Type type = field.FieldType;
+					object value = pair.Value;
+					if (type == typeof(float) && value is IConvertible)
+					{
+						field.SetValue(made, Convert.ToSingle(value));
+						done.Add(pair.Key + "=" + field.GetValue(made));
+					}
+					else if (type == typeof(int) && value is IConvertible && !(value is string))
+					{
+						field.SetValue(made, Convert.ToInt32(value));
+						done.Add(pair.Key + "=" + field.GetValue(made));
+					}
+					else if (type == typeof(bool) && value is bool)
+					{
+						field.SetValue(made, value);
+						done.Add(pair.Key + "=" + field.GetValue(made));
+					}
+					else if (type == typeof(string) && value is string)
+					{
+						field.SetValue(made, value);
+						done.Add(pair.Key + "=" + field.GetValue(made));
+					}
+					else if (type.IsEnum && value is string)
+					{
+						field.SetValue(made, Enum.Parse(type, (string)value, true));
+						done.Add(pair.Key + "=" + field.GetValue(made));
+					}
+					else
+					{
+						ctx.Log.LogWarning($"{id}: field '{pair.Key}' is a {type.Name}, which JSON cannot set (numbers, true/false, text and enum names only), so it is left as it was.");
+					}
+				}
+				catch (Exception e)
+				{
+					ctx.Log.LogWarning($"{id}: field '{pair.Key}' could not be set to {pair.Value}: {e.Message}");
+				}
+			}
+			if (done.Count > 0)
+			{
+				ctx.Log.LogInfo($"{id}: fields set on the {made.GetType().Name}: {string.Join(", ", done)}");
+			}
+		}
+
 		private static UpgradeComponent Create(ModContext ctx, ItemCatalog catalog, Dictionary<string, object> def, ItemTier tier, List<StatBoost> boosts)
 		{
 			string id = MiniJson.String(def, "id");
@@ -117,6 +186,7 @@ namespace HalfGripTools
 			{
 				passive.charmVariant = 0;
 			}
+			ApplyFields(ctx, id, made, def);
 
 			string iconFile = MiniJson.String(def, "icon");
 			if (iconFile != "")
