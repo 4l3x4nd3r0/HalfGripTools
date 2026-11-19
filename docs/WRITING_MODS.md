@@ -144,6 +144,7 @@ Compile it without starting the game: `.\tools\check-mods.ps1 -ModsPath .\exampl
 | `Items` | See below. |
 | `Keys` | Adds keys to Settings > Controls (since 1.0.2). See below. |
 | `Net` | Messages to the other players of a Multiplayer room, and game modes (since 1.0.6). See below. |
+| `Maps` | Race maps built from code (2.0). See "Maps" below. |
 
 Also public: `VoxelMesh.Build` and `VoxelMesh.MakeObject` (turn a sprite into the thin 3D mesh the game uses for a held gun), and `GunConversion.CopyFields` (copy serialized fields between components). The RPG and SniperRifle mods use both.
 
@@ -231,6 +232,86 @@ ctx.Net.RegisterMode(new NetMode
 The host picks it like any other mode. Every mode is run as a race (laps, finish line, results); the mod adds its own rules over `ctx.Net`, and `Net.EndRace()` ends the race early. `SpawnPoint(i)` is asked on every machine for car number `i` (0 is the first on the grid) and must give the same answer everywhere; return null to use the track's own grid, which continues behind the start line, along the racing line, past its six spots. More than about 20 players is slow: every car is sent to every player.
 
 If the host changes to a mode that takes fewer players than the room has, the players who joined last start the race as spectators.
+
+## Maps
+
+A map has no scene of its own (a mod cannot add one). It is built inside the Stadium scene when its race loads. HalfGripTools does the plumbing, so a map needs no patches:
+
+* it makes the map's entry in the game's run config (so it is dealt in runs and a saved run finds it by name),
+* gives it a **track id** of its own and remembers it (`maps	rackids.json` in the data folder; ids 20 to 31 first, then 5 to 19). A map that already has records under an id can ask for it with `PreferredTrackId` (Highway asks for 20),
+* sends the game to the Stadium scene for it, and
+* calls your `OnRace` once that scene has loaded and before it starts, so the start grid can still be moved.
+
+```csharp
+ctx.Maps.Register(new MapInfo
+{
+    Id = "mymap",                 // unique, lower case
+    DisplayName = "My Map",
+    PreferredTrackId = -1,        // 5..31 to keep an id you shipped before
+    LapLength = 3000f,            // game units: time objectives are Stadium's (1457) scaled by this
+    BenchmarkFactor = 0.9f,       // lower is harder
+    Weather = w => w.fogActive = true,   // adjust the map's copy of the weather
+    Adjust = def => def.icon = ctx.Sprites.LoadSprite("icon.png", def.icon),   // anything else on the MapDefinition
+    OnRace = (scene, tm) => MyScene.Build(scene, tm)
+});
+```
+
+`info.Definition` is the map's `MapDefinition` once the game has a run config (not yet at `Load`; the loader tries again at every scene load). Highway and Temple of Drift are the two big examples.
+
+### A map from a file, with no code
+
+A mod folder with only a `mod.json` and a `maps` folder is a map mod: every `maps\*.json` in it is a map. `examples\SampleMap` is one. The file is what the Map Maker writes.
+
+```json
+{
+  "format": 1,
+  "id": "mymap",
+  "name": "My Map",
+  "weather": "clear",
+  "icon": "icon.png",
+  "music": "race.wav",
+  "track": [
+    { "x": 0, "y": 0, "z": -380, "width": 40, "surface": "asphalt", "railRight": true, "wallLeft": true },
+    ...
+  ],
+  "props": [ { "type": "tree", "x": 200, "y": 0, "z": 600, "rot": 90, "scale": 1.2 } ],
+  "terrain": { "size": 1600, "cells": 160, "heights": "<base64 of little-endian int16, 0.05 units each>" }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `track` | The track line: a closed loop through the points (a uniform Catmull-Rom spline), 4 to 400 points. Point 0 is the start line; the cars line up behind it. `width` is the whole road, 12 to 120 (a car is about 14 long and 5 wide). `surface` is `asphalt`, `dirt`, `ice` or `wet` from this point to the next. `railLeft`, `railRight` add guardrail, `wallLeft`, `wallRight` an invisible frictionless wall at the road's edge (a car slides along it). Left and right are as you drive. The track must not cross itself. |
+| `props` | `tree`, `cone`, `barrel`, `block`, `ramp` or `arch`, up to 3000. `rot` is degrees about the up axis. |
+| `terrain` | The ground: a square of `size` units, `cells` squares to a side (16 to 256), centred on the origin, one height per grid point (`(cells+1)` squared, row by row from the corner at -x, -z). It is pressed down under the road automatically, so a hill never covers it. Leave it out for flat ground. |
+| `weather` | `clear`, `rain`, `fog`, `snow`, `ash`, `night`. |
+| `icon`, `music` | Files next to the map file (no folders): a PNG for the run map, a 16-bit PCM wav for the race. |
+
+The start line is turned to point along +X for you (the game's start grid faces +X), and the map is lowered so its start is at height 0. The file is checked when it is read: a damaged file is skipped with a line in the log, coordinates are limited to 4000 units, and nothing in it can name a file outside its own folder.
+
+### The Map Maker
+
+Switch it on in `config\HalfGripTools.cfg` in the data folder:
+
+```
+[MapMaker]
+Enabled = true
+AlwaysOpen = true
+```
+
+`Enabled` adds a scratch map, **Map Maker**, an oval, and the editor. `AlwaysOpen` makes every race you start that scratch map, so starting a run (use a throwaway one: leaving a race costs a life) takes you straight to the editor. The editor is also available in a race on any map made from a file: press **F10** (`Key`) and the race is loaded again with the editor open.
+
+The editor holds time and gives you a free camera over the map as it stands, and edits it live, so what you see is what you race on:
+
+* **Camera**: right mouse look, `WASD` fly, `Q`/`E` down and up, shift faster, scroll changes the speed, `T` a top view (scroll changes the height).
+* **1 TRACK**: click empty ground to add a point (on the road, between its neighbours), drag a point to move it, `Delete` removes it, `[` `]` or PgUp/PgDn change its height. The panel sets the width, surface, guardrail and walls of the selected point, or of all points.
+* **2 PROPS**: pick a kind and click the ground; click a prop to drag it; `R`/`F` turn it.
+* **3 TERRAIN**: a brush (raise, lower, smooth, flatten) with a size and strength.
+* **4 MAP**: name, weather, **SAVE**, **SAVE AS**, **EXPORT AS A MOD FOLDER**, **TEST DRIVE** and **CLOSE EDITOR**.
+
+SAVE writes `maps\<id>.json` in the data folder; maps there join your runs the next time the game starts (`MyMapsInRuns`). EXPORT writes `export\<id>` with a `mod.json` and the map file, a mod folder ready for the game's `Mods` folder or the Workshop. TEST DRIVE saves, then loads the race again so the game lays out its start grid and AI on the changed map; press F10 to go back. Close the editor without a test drive and the race starts on the old grid.
+
+The guardrail of these maps holds like a wall below 90 on the dash (speed into the rail), bends from 90 to 120 and breaks from 120 (`[Guardrail]` settings in the same file).
 
 ## Mod manager
 

@@ -32,6 +32,8 @@ namespace HalfGripTools.HarmonyHost
 			GameHooks.ControlsRedirected = ControlsListPatch.Installed;
 			Patch(typeof(UpgradeMapperAwakePatch));
 			Patch(typeof(LoadoutApplyPatch));
+			Patch(typeof(TrackIndexPatch));
+			Patch(typeof(RaceBeginPatch));
 		}
 
 		public IModPatcher CreatePatcher(string ownerId)
@@ -117,6 +119,24 @@ namespace HalfGripTools.HarmonyHost
 		private static void Postfix(ref string __result)
 		{
 			__result = GameHooks.RunStatsFit(__result);
+		}
+	}
+
+	[HarmonyPatch(typeof(MenuManager), "TrackIndex")]
+	internal static class TrackIndexPatch
+	{
+		private static bool Prefix(ref int __result)
+		{
+			return !GameHooks.TrackIndex(ref __result);
+		}
+	}
+
+	[HarmonyPatch(typeof(RunState), nameof(RunState.BeginRace))]
+	internal static class RaceBeginPatch
+	{
+		private static void Prefix()
+		{
+			GameHooks.RaceBeginning();
 		}
 	}
 

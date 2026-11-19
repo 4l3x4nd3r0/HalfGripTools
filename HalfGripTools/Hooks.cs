@@ -47,6 +47,24 @@ namespace HalfGripTools
 		/// <summary>True when the game reads <see cref="ControlRows"/> where it used to read <c>Controls.All</c> (Controls.Holder, ControlsSettingsUI.Fill).</summary>
 		public static bool ControlsRedirected { get; set; }
 
+		/// <summary>
+		/// Call at the start of <c>MenuManager.TrackIndex</c> (private, returns the index of the scene to load). If this returns true, return
+		/// <paramref name="result"/> instead: the race is on a map a mod added, which is built inside the Stadium scene.
+		/// </summary>
+		public static bool TrackIndex(ref int result)
+		{
+			return ModLoader.Running && MapRegistry.TrackIndex(ref result);
+		}
+
+		/// <summary>Call at the start of <c>RunState.BeginRace</c>. Only does anything when the Map Maker is set to open on every race.</summary>
+		public static void RaceBeginning()
+		{
+			if (ModLoader.Running)
+			{
+				MapRegistry.RaceBeginning();
+			}
+		}
+
 		/// <summary>Call after the <c>Speedrun.Mode</c> setter ran.</summary>
 		public static void SpeedrunModeChanged()
 		{

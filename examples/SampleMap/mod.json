@@ -1,0 +1,10 @@
+{
+  "id": "samplemap",
+  "name": "Sample Loop (map)",
+  "version": "1.0.0",
+  "author": "4l3x4nd3r",
+  "description": "A map made from a file, no code: a 3.4 km loop with a dirt stretch, guardrail, invisible walls, hills and props. An example for the Map Maker.",
+  "kind": "map",
+  "apiVersion": "2.0.0",
+  "gameVersion": "0.419"
+}

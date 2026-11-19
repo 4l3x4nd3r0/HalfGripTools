@@ -341,6 +341,7 @@ namespace HalfGripTools
 
 			loaded.Add(ctx);
 			JsonItems.Register(ctx);
+			MapLibrary.LoadModMaps(ctx);
 			if (mod != null)
 			{
 				instances.Add(mod);
@@ -360,6 +361,7 @@ namespace HalfGripTools
 			}
 			Running = false;
 			MenuButton.Remove();
+			MapLibrary.Shutdown();
 			for (int i = instances.Count - 1; i >= 0; i--)
 			{
 				try

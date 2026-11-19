@@ -68,6 +68,9 @@ namespace HalfGripTools
 		/// <summary>Talks to the same mod on the other players' machines, and adds game modes, when the Multiplayer mod is installed (1.0.6 and newer). Does nothing without it.</summary>
 		public ModNet Net { get; }
 
+		/// <summary>Adds race maps built from code (<see cref="MapInfo"/>). A mod folder with a <c>maps</c> folder of map files needs no code at all.</summary>
+		public ModMaps Maps { get; }
+
 		internal ModContext(ModManifest manifest, ModLog log)
 		{
 			Manifest = manifest;
@@ -79,6 +82,7 @@ namespace HalfGripTools
 			Items = new ModItems(this);
 			Keys = new ModKeys(this);
 			Net = new ModNet(this);
+			Maps = new ModMaps(this);
 		}
 
 		/// <summary>
@@ -134,6 +138,7 @@ namespace HalfGripTools
 			Items.RemoveAll();
 			Keys.RemoveAll();
 			Net.Shutdown();
+			Maps.RemoveAll();
 		}
 	}
 }

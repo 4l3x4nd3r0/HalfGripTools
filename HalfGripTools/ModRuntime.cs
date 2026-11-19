@@ -61,6 +61,7 @@ namespace HalfGripTools
 			LegacyMigration.Run();
 			ModConfig settings = new ModConfig(System.IO.Path.Combine(ModPaths.ConfigDir, "HalfGripTools.cfg"));
 			ModLoader.ExtraFolders = settings.Bind("General", "ExtraModFolders", "", "More folders to load mods from, separated by ';'. The Mods folder next to the game is always read first; if the same mod id is in two folders the first one is used.").Value;
+			MapMaker.Init(settings);
 			settings.SaveIfDirty();
 
 			// The hooks that only watch speedrun mode and add the mod list to the anonymous run stats (so a speedrun run says "mods":[]).
@@ -80,6 +81,7 @@ namespace HalfGripTools
 
 			Install(() => PatchProvider?.InstallModHooks());
 			SceneManager.sceneLoaded += OnSceneLoaded;
+			MapLibrary.LoadUserMaps();
 			ModLoader.LoadAll(Log);
 			Log.LogInfo("Loaded HalfGripTools " + Version + " with " + ModLoader.Mods.Count + " mod(s)");
 
@@ -126,6 +128,7 @@ namespace HalfGripTools
 				return;
 			}
 			ItemInjector.InjectAll();
+			MapRegistry.BeforeScene();
 			MenuButton.TryAttach();
 			if (MenuButton.Attached)
 			{
@@ -145,6 +148,7 @@ namespace HalfGripTools
 					}
 				}
 			}
+			MapRegistry.OnSceneLoaded(scene);
 		}
 
 		/// <summary>The loader's own MonoBehaviour: one poll twice a second for the speedrun switch.</summary>
