@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The BepInEx host: a plugin of a few lines that starts HalfGripTools.dll inside BepInEx and sends its log to BepInEx's log. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>HalfGripTools.BepInEx</AssemblyName>
+    <Version>2.0.0</Version>
+    <RootNamespace>HalfGripTools.BepInExHost</RootNamespace>
+    <LangVersion>10.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <DebugType>none</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <PathMap>$(MSBuildThisFileDirectory)=/src/</PathMap>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+
+    <GameDir Condition="'$(GameDir)' == ''">F:\SteamLibrary\steamapps\common\Half Grip Demo</GameDir>
+    <ManagedDir>$(GameDir)\HalfGrip_Data\Managed</ManagedDir>
+    <BepInExCore>$(GameDir)\BepInEx\core</BepInExCore>
+
+    <!-- The layout of a BepInEx install, so the release zip unzips into the game folder. -->
+    <OutDir>$(MSBuildThisFileDir)..\dist\BepInEx\plugins\HalfGripTools\</OutDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HalfGripTools\HalfGripTools.csproj" />
+    <ProjectReference Include="..\HalfGripTools.Harmony\HalfGripTools.Harmony.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="$(ManagedDir)\UnityEngine*.dll">
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExCore)\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCore)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

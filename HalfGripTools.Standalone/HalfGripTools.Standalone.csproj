@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The standalone host: Doorstop (winhttp.dll in the game folder) starts this assembly before Unity does, and it starts
+       HalfGripTools.dll once the first scene is up. No BepInEx. Everything it needs is next to it in HalfGripTools\. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>HalfGripTools.Standalone</AssemblyName>
+    <Version>2.0.0</Version>
+    <RootNamespace>HalfGripTools.StandaloneHost</RootNamespace>
+    <LangVersion>10.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <DebugType>none</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <PathMap>$(MSBuildThisFileDirectory)=/src/</PathMap>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+
+    <GameDir Condition="'$(GameDir)' == ''">F:\SteamLibrary\steamapps\common\Half Grip Demo</GameDir>
+    <ManagedDir>$(GameDir)\HalfGrip_Data\Managed</ManagedDir>
+
+    <OutDir>$(MSBuildThisFileDir)..\dist\standalone\HalfGripTools\</OutDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HalfGripTools\HalfGripTools.csproj" />
+    <ProjectReference Include="..\HalfGripTools.Harmony\HalfGripTools.Harmony.csproj" />
+    <!-- Compiled against HarmonyX 2.9.0 from NuGet; at run time BepInEx 5.4.23.5's own builds of it, MonoMod and Cecil are used (see the target below),
+         because those are the ones that run on this game's Mono (the NuGet netstandard2.0 build fails to load there with a TypeLoadException). -->
+    <PackageReference Include="HarmonyX" Version="2.9.0" ExcludeAssets="runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="$(ManagedDir)\UnityEngine*.dll">
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Harmony, MonoMod and Cecil as BepInEx ships them. For a local build they are taken from the BepInEx in the game folder; the release zip takes
+       them from the pinned BepInEx 5.4.23.5 download instead (tools\package.ps1), so what is published does not depend on this PC. -->
+  <Target Name="CopyHarmony" AfterTargets="Build" Condition="Exists('$(GameDir)\BepInEx\core\0Harmony.dll')">
+    <ItemGroup>
+      <HarmonyFile Include="$(GameDir)\BepInEx\core\0Harmony.dll;$(GameDir)\BepInEx\core\MonoMod.Utils.dll;$(GameDir)\BepInEx\core\MonoMod.RuntimeDetour.dll;$(GameDir)\BepInEx\core\Mono.Cecil.dll;$(GameDir)\BepInEx\core\Mono.Cecil.Mdb.dll;$(GameDir)\BepInEx\core\Mono.Cecil.Pdb.dll;$(GameDir)\BepInEx\core\Mono.Cecil.Rocks.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(HarmonyFile)" DestinationFolder="$(OutDir)" />
+  </Target>
+</Project>

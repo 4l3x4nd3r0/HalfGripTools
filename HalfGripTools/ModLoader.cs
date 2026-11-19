@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using BepInEx.Logging;
 using UnityEngine;
 
 namespace HalfGripTools
@@ -38,7 +37,7 @@ namespace HalfGripTools
 		internal string VersionWarning = "";
 	}
 
-	/// <summary>Finds the mods in <c>BepInEx\HalfGripMods</c>, compiles them and loads them, one failure never stopping the others.</summary>
+	/// <summary>Finds the mods in the mod folders, compiles them and loads them, one failure never stopping the others.</summary>
 	internal static class ModLoader
 	{
 		private static readonly List<ModContext> loaded = new List<ModContext>();
@@ -55,21 +54,43 @@ namespace HalfGripTools
 		/// <summary>Every installed mod with a valid mod.json, loaded or not, in name order. What the mod manager lists.</summary>
 		internal static IReadOnlyList<ModEntry> Entries => entries;
 
-		internal static string ModsFolder => Path.Combine(BepInEx.Paths.BepInExRootPath, "HalfGripMods");
-
 		/// <summary>Extra folders to read mods from, separated by ';' (the loader's own setting). Set before <see cref="LoadAll"/>.</summary>
 		internal static string ExtraFolders = "";
 
-		private static IReadOnlyList<string> cachedRoots;
+		/// <summary>A folder mods are read from. <see cref="Kind"/> is local, legacy, extra or workshop.</summary>
+		internal sealed class ModRoot
+		{
+			internal string Path;
 
-		/// <summary>The folders mods are read from, in the order that decides which copy of an id wins: the main folder first, then the extra ones as written.</summary>
-		internal static IReadOnlyList<string> Roots()
+			internal string Kind;
+		}
+
+		private static IReadOnlyList<ModRoot> cachedRoots;
+
+		/// <summary>
+		/// The folders mods are read from, in the order that decides the load order and which copy of an id wins: <c>Mods</c> next to the game, the 1.x folder
+		/// <c>BepInEx\HalfGripMods</c> if there is one, the extra folders as written, and last Steam's Workshop folder, so a copy you made yourself is used
+		/// in place of the subscribed one.
+		/// </summary>
+		internal static IReadOnlyList<ModRoot> Roots()
 		{
 			if (cachedRoots != null)
 			{
 				return cachedRoots;
 			}
-			List<string> roots = new List<string> { Path.GetFullPath(ModsFolder) };
+			List<ModRoot> roots = new List<ModRoot> { new ModRoot { Path = Path.GetFullPath(ModPaths.LocalMods), Kind = "local" } };
+			void Add(string path, string kind)
+			{
+				string full = Path.GetFullPath(path);
+				if (!roots.Any(r => string.Equals(r.Path, full, StringComparison.OrdinalIgnoreCase)))
+				{
+					roots.Add(new ModRoot { Path = full, Kind = kind });
+				}
+			}
+			if (Directory.Exists(ModPaths.LegacyMods))
+			{
+				Add(ModPaths.LegacyMods, "legacy");
+			}
 			foreach (string part in (ExtraFolders ?? "").Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries))
 			{
 				string trimmed = part.Trim().Trim('"');
@@ -77,35 +98,62 @@ namespace HalfGripTools
 				{
 					continue;
 				}
-				string full = Path.GetFullPath(trimmed);
-				if (!Directory.Exists(full))
+				if (!Directory.Exists(trimmed))
 				{
-					Plugin.Log.LogWarning($"Extra mod folder '{full}' does not exist and is ignored");
+					ModRuntime.Log.LogWarning($"Extra mod folder '{Path.GetFullPath(trimmed)}' does not exist and is ignored");
 				}
-				else if (!roots.Contains(full, StringComparer.OrdinalIgnoreCase))
+				else
 				{
-					roots.Add(full);
+					Add(trimmed, "extra");
 				}
+			}
+			string workshop = ModPaths.WorkshopContent();
+			if (workshop != null)
+			{
+				Add(workshop, "workshop");
 			}
 			cachedRoots = roots;
 			return roots;
 		}
 
-		internal static void LoadAll(ManualLogSource log)
+		/// <summary>The mod folders in a root. In Steam's Workshop folder every item is a folder, and a mod is the item itself or a folder inside it.</summary>
+		private static IEnumerable<string> ModFolders(ModRoot root)
+		{
+			foreach (string dir in Directory.GetDirectories(root.Path).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
+			{
+				if (File.Exists(Path.Combine(dir, "mod.json")) || root.Kind != "workshop")
+				{
+					yield return dir;
+				}
+				else
+				{
+					foreach (string inner in Directory.GetDirectories(dir).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
+					{
+						yield return inner;
+					}
+				}
+			}
+		}
+		internal static void LoadAll(ModLog log)
 		{
 			Running = true;
-			Directory.CreateDirectory(ModsFolder);
+			Directory.CreateDirectory(ModPaths.LocalMods);
 			ModStore.Load();
 			// Index = place in the load order. The mod manager lists by name, the loader loads by Index.
-			foreach (var item in Discover(log).Select((m, i) => new { m, i }).OrderBy(x => x.m.DisplayName, StringComparer.OrdinalIgnoreCase))
+			List<ModManifest> discovered = Discover(log);
+			foreach (ModManifest m in discovered.Where(m => m.Source.StartsWith("workshop")))
+			{
+				ModStore.RegisterWorkshop(m.id, ModHash.OfFolder(m.Folder));
+			}
+			foreach (var item in discovered.Select((m, i) => new { m, i }).OrderBy(x => x.m.DisplayName, StringComparer.OrdinalIgnoreCase))
 			{
 				entries.Add(new ModEntry { Manifest = item.m, Index = item.i });
 			}
-			log.LogInfo($"Found {entries.Count} mod(s) in {string.Join("; ", Roots())}. Game version {GameVersion.Current}");
+			log.LogInfo($"Found {entries.Count} mod(s) in {string.Join("; ", Roots().Select(r => r.Path))}. Game version {GameVersion.Current}");
 			foreach (ModEntry entry in entries)
 			{
 				ModManifest m = entry.Manifest;
-				log.LogInfo($"  {m.id} {m.version}  kind={(m.kind == "" ? "-" : m.kind)} trust={m.trust} api={(m.apiVersion == "" ? "-" : m.apiVersion)} tags=[{string.Join(",", m.tags)}]");
+				log.LogInfo($"  {m.id} {m.version}  kind={(m.kind == "" ? "-" : m.kind)} trust={m.trust} api={(m.apiVersion == "" ? "-" : m.apiVersion)} tags=[{string.Join(",", m.tags)}] source={m.Source}");
 				if (!GameVersion.Matches(entry.Manifest.gameVersion, GameVersion.Current))
 				{
 					entry.VersionWarning = $"Made for game {entry.Manifest.gameVersion}, this is {GameVersion.Current}. It might not work correctly.";
@@ -120,13 +168,13 @@ namespace HalfGripTools
 				if (NeedsNewerTools(manifest))
 				{
 					entry.Status = ModStatus.Failed;
-					entry.Detail = $"needs HalfGripTools {manifest.tools} or newer, this is {Plugin.Version}";
+					entry.Detail = $"needs HalfGripTools {manifest.tools} or newer, this is {ModRuntime.Version}";
 					log.LogError($"{manifest.DisplayName} {entry.Detail}. Skipped.");
 				}
 				else if (!ModStore.IsEnabled(manifest.id))
 				{
 					entry.Status = ModStatus.Off;
-					log.LogInfo($"{manifest.DisplayName} is switched off in the mod manager");
+					log.LogInfo(ModStore.NeedsConsent(manifest.id) ? $"{manifest.DisplayName} comes from Steam's Workshop and stays off until you switch it on in the mod manager" : $"{manifest.DisplayName} is switched off in the mod manager");
 				}
 				else
 				{
@@ -152,18 +200,30 @@ namespace HalfGripTools
 			}
 		}
 
+		/// <summary>"local", "legacy" or "extra", or <c>workshop:&lt;item id&gt;</c> (the item folder's name) for a mod from Steam's Workshop.</summary>
+		private static string SourceOf(ModRoot root, string modFolder)
+		{
+			if (root.Kind != "workshop")
+			{
+				return root.Kind;
+			}
+			string parent = Path.GetDirectoryName(modFolder);
+			bool inside = !string.Equals(parent, root.Path, StringComparison.OrdinalIgnoreCase);
+			return "workshop:" + Path.GetFileName(inside ? parent : modFolder);
+		}
 		private static bool NeedsNewerTools(ModManifest manifest)
 		{
 			Version needed;
 			Version have;
-			return Version.TryParse(manifest.tools, out needed) && Version.TryParse(Plugin.Version, out have) && have < needed;
+			return Version.TryParse(manifest.tools, out needed) && Version.TryParse(ModRuntime.Version, out have) && have < needed;
 		}
 
-		private static List<ModManifest> Discover(ManualLogSource log)
+		private static List<ModManifest> Discover(ModLog log)
 		{
 			List<ModManifest> found = new List<ModManifest>();
-			foreach (string dir in Roots().SelectMany(root => Directory.GetDirectories(root).OrderBy(d => d, StringComparer.OrdinalIgnoreCase)))
+			foreach (var found2 in Roots().SelectMany(root => ModFolders(root).Select(d => new { root, d })))
 			{
+				string dir = found2.d;
 				string file = Path.Combine(dir, "mod.json");
 				if (!File.Exists(file))
 				{
@@ -172,6 +232,7 @@ namespace HalfGripTools
 				try
 				{
 					ModManifest manifest = ModManifest.FromJson(File.ReadAllText(file), dir);
+					manifest.Source = SourceOf(found2.root, dir);
 					foreach (string problem in manifest.CheckNewFields())
 					{
 						log.LogWarning($"{file}: {problem}");
@@ -211,7 +272,7 @@ namespace HalfGripTools
 		}
 
 		/// <summary>Mods that others <c>require</c> come first. A missing, off or circular requirement leaves that mod out.</summary>
-		private static IEnumerable<ModEntry> Order(List<ModEntry> candidates, ManualLogSource log)
+		private static IEnumerable<ModEntry> Order(List<ModEntry> candidates, ModLog log)
 		{
 			List<ModEntry> ordered = new List<ModEntry>();
 			List<ModEntry> waiting = candidates.OrderBy(e => e.Index).ToList();
@@ -235,10 +296,10 @@ namespace HalfGripTools
 			return ordered;
 		}
 
-		private static void Load(ModEntry entry, ManualLogSource log)
+		private static void Load(ModEntry entry, ModLog log)
 		{
 			ModManifest manifest = entry.Manifest;
-			ManualLogSource modLog = BepInEx.Logging.Logger.CreateLogSource(manifest.DisplayName);
+			ModLog modLog = ModRuntime.CreateLog(manifest.DisplayName);
 			ModContext ctx = new ModContext(manifest, modLog);
 
 			string src = Path.Combine(manifest.Folder, "src");
@@ -250,6 +311,18 @@ namespace HalfGripTools
 				if (assembly == null)
 				{
 					entry.Status = ModStatus.Failed;
+					// A 1.x mod names BepInEx's types, which 2.0 does not have: say what to do instead of a wall of "type not found".
+					if (sources.Any(f => File.ReadAllText(f).Contains("using BepInEx")))
+					{
+						entry.Errors.Insert(0, "Made for HalfGripTools 1.x (it uses BepInEx types). It needs a small update: see docs\\WRITING_MODS.md, 'Porting to 2.0'.");
+						log.LogError($"{manifest.DisplayName} uses BepInEx types and was made for HalfGripTools 1.x. See docs\\WRITING_MODS.md, 'Porting to 2.0'.");
+					}
+					// A host built into the game has no Harmony, so a mod with [HarmonyPatch] classes cannot even compile there.
+					if (ModRuntime.PatchProvider == null && sources.Any(f => File.ReadAllText(f).Contains("HarmonyLib")))
+					{
+						entry.Errors.Insert(0, $"This host ({ModRuntime.HostName}) cannot patch the game, and this mod uses Harmony. It cannot run here.");
+						log.LogError($"{manifest.DisplayName} uses Harmony, which this host ({ModRuntime.HostName}) does not have, so it was skipped.");
+					}
 					entry.Detail = entry.Errors.Count > 0 ? entry.Errors[0] : "does not compile (see the log)";
 					return;
 				}
@@ -272,13 +345,14 @@ namespace HalfGripTools
 			{
 				instances.Add(mod);
 				mod.Load(ctx);
+				ctx.Config.SaveIfDirty();
 			}
 			entry.Status = ModStatus.Loaded;
 			log.LogInfo($"Loaded {manifest.DisplayName} {manifest.version}");
 		}
 
 		/// <summary>Switches every mod off: unload hooks, patches and items. Nothing is destroyed, so objects already in use stay valid.</summary>
-		internal static void Shutdown(ManualLogSource log)
+		internal static void Shutdown(ModLog log)
 		{
 			if (!Running)
 			{

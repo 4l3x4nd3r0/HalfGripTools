@@ -1,4 +1,4 @@
-# Compiles the C# of every mod in a folder against the game, BepInEx and HalfGripTools, without starting the game.
+# Compiles the C# of every mod in a folder against the game, Harmony and HalfGripTools, without starting the game.
 # It uses the same language version (C# 10) as the compiler inside HalfGripTools. Nothing is written to the repo.
 # HalfGripTools is built first (dist\), and its DLL is what the mods compile against.
 #   .\check-mods.ps1 -ModsPath .\examples                  every mod folder inside .\examples
@@ -12,9 +12,11 @@ if (Test-Path "$env:USERPROFILE\.dotnet\dotnet.exe") {
 }
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 
-dotnet build "$root\HalfGripTools\HalfGripTools.csproj" -c Release "-p:GameDir=$GameDir" -v q --nologo
-if ($LASTEXITCODE -ne 0) { throw "HalfGripTools does not build" }
-$tools = "$root\dist\BepInEx\plugins\HalfGripTools\HalfGripTools.dll"
+& "$PSScriptRoot\build.ps1" -GameDir $GameDir | Out-Null
+# The core is the mod API. Harmony comes with the standalone host (the same 2.9.0 that BepInEx ships), so BepInEx is not needed here.
+$tools = "$root\dist\standalone\HalfGripTools\HalfGripTools.dll"
+$harmony = "$root\dist\standalone\HalfGripTools\0Harmony.dll"
+if (-not (Test-Path $tools)) { throw "HalfGripTools does not build" }
 
 $failed = @()
 foreach ($dir in Get-ChildItem $ModsPath -Directory) {
@@ -37,8 +39,7 @@ foreach ($dir in Get-ChildItem $ModsPath -Directory) {
   <ItemGroup>
     <Compile Include="$($dir.FullName)\src\**\*.cs" />
     <Reference Include="$managed\*.dll" Exclude="$managed\mscorlib.dll;$managed\netstandard.dll;$managed\System*.dll" />
-    <Reference Include="$GameDir\BepInEx\core\BepInEx.dll" />
-    <Reference Include="$GameDir\BepInEx\core\0Harmony.dll" />
+    <Reference Include="$harmony" />
     <Reference Include="$tools" />
   </ItemGroup>
 </Project>

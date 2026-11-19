@@ -1,0 +1,20 @@
+HalfGripTools: third-party components
+=====================================
+
+HalfGripTools itself is MIT licensed (LICENSE.txt). It ships with, or loads, these:
+
+Roslyn (Microsoft.CodeAnalysis.dll, Microsoft.CodeAnalysis.CSharp.dll) and the System.* helper DLLs next to it
+  .NET Foundation / Microsoft, MIT licence, signed by Microsoft. Compiles the mods on your PC. https://github.com/dotnet/roslyn
+
+HarmonyX (0Harmony.dll), MonoMod.Utils.dll, MonoMod.RuntimeDetour.dll, Mono.Cecil*.dll  (standalone package only)
+  HarmonyX 2.9.0 (https://github.com/BepInEx/HarmonyX), MonoMod (https://github.com/MonoMod/MonoMod) and Mono.Cecil
+  (https://github.com/jbevain/cecil). All MIT licence. The same Harmony version BepInEx 5.4.23.5 ships.
+  With the BepInEx package they are not included: BepInEx brings its own copy.
+
+Unity Doorstop 4.5.0 (winhttp.dll)  (standalone package only)
+  Copyright (c) NeighTools / Geoffrey Horsington, GNU Lesser General Public License v2.1, unmodified.
+  Source and licence: https://github.com/NeighTools/UnityDoorstop (tag v4.5.0). The licence text is in
+  HalfGripTools\LICENSES\Doorstop-LGPL-2.1.txt. It is the same file the game already has when BepInEx is installed.
+
+BepInEx is not part of HalfGripTools 2.0. The BepInEx package (HalfGripTools.BepInEx.dll) only runs inside a BepInEx
+5 install that you already have: https://github.com/BepInEx/BepInEx (LGPL-2.1).

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using HarmonyLib;
 using UnityEngine;
 
 namespace HalfGripTools
@@ -135,7 +134,7 @@ namespace HalfGripTools
 				if (mapper != null)
 				{
 					mapper.allUpgrades?.Remove(entry.Item);
-					Traverse.Create(mapper).Field("lookup").GetValue<Dictionary<string, UpgradeComponent>>()?.Remove(entry.Id);
+					Reflect.GetField<Dictionary<string, UpgradeComponent>>(mapper, "lookup")?.Remove(entry.Id);
 				}
 				ctx.Log.LogInfo("Removed " + entry.Id + " from the item catalog");
 			}
@@ -158,24 +157,6 @@ namespace HalfGripTools
 			{
 				mod.Items.Inject(catalog);
 			}
-		}
-	}
-
-	[HarmonyPatch(typeof(UpgradeMapper), "Awake")]
-	internal static class UpgradeMapperAwakePatch
-	{
-		private static void Prefix()
-		{
-			ItemInjector.InjectAll();
-		}
-	}
-
-	[HarmonyPatch(typeof(LoadoutProgress), nameof(LoadoutProgress.ApplyToNewRun))]
-	internal static class LoadoutApplyPatch
-	{
-		private static void Prefix()
-		{
-			ItemInjector.InjectAll();
 		}
 	}
 }

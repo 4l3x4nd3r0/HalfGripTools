@@ -16,8 +16,10 @@ namespace HalfGripTools
 
 	/// <summary>
 	/// What the player chose in the mod manager: which mods are off, and the saved playlists. Kept in
-	/// <c>BepInEx\config\HalfGripTools.mods.json</c>, which is plain JSON you can edit. Mods are on unless listed as off,
-	/// so a newly installed mod is on. Read when the game starts; a change takes effect at the next start.
+	/// <c>mods.json</c> in the data folder, which is plain JSON you can edit. Mods are on unless listed as off,
+	/// so a newly installed mod is on. The exception is a mod that comes from Steam's Workshop: it starts off, because
+	/// Steam can change its code at any time, and is on only after you switched it on, for the files it had then
+	/// (the folder hash is kept; a changed mod has to be switched on again). Read when the game starts; a change takes effect at the next start.
 	/// </summary>
 	internal static class ModStore
 	{
@@ -28,15 +30,54 @@ namespace HalfGripTools
 		/// <summary>Name of the playlist the player last picked, or "" for no playlist.</summary>
 		internal static string Active { get; private set; } = "";
 
-		private static string FilePath => Path.Combine(BepInEx.Paths.ConfigPath, "HalfGripTools.mods.json");
+		private static string FilePath => Path.Combine(ModPaths.DataDir, "mods.json");
+
+		// Steam's Workshop mods: id -> hash of the folder as it is now (set at every start), and id -> hash it had when the player switched it on.
+		private static readonly Dictionary<string, string> workshopNow = new Dictionary<string, string>();
+
+		private static readonly Dictionary<string, string> workshopConsent = new Dictionary<string, string>();
+
+		/// <summary>Tells the store that this mod comes from the Workshop and has these files now. Called by the loader after it found the mods.</summary>
+		internal static void RegisterWorkshop(string id, string hash)
+		{
+			workshopNow[id] = hash;
+		}
+
+		/// <summary>True if the mod is a Workshop mod whose files are not the ones it was switched on for (new, or changed by an update).</summary>
+		internal static bool NeedsConsent(string id)
+		{
+			return workshopNow.ContainsKey(id) && !IsEnabled(id);
+		}
 
 		internal static bool IsEnabled(string id)
 		{
+			if (workshopNow.TryGetValue(id, out string now))
+			{
+				return workshopConsent.TryGetValue(id, out string given) && given == now;
+			}
 			return !disabled.Contains(id);
 		}
 
 		internal static void SetEnabled(string id, bool enabled)
 		{
+			SetQuietly(id, enabled);
+			Save();
+		}
+
+		private static void SetQuietly(string id, bool enabled)
+		{
+			if (workshopNow.TryGetValue(id, out string now))
+			{
+				if (enabled)
+				{
+					workshopConsent[id] = now;
+				}
+				else
+				{
+					workshopConsent.Remove(id);
+				}
+				return;
+			}
 			if (enabled)
 			{
 				disabled.Remove(id);
@@ -45,7 +86,6 @@ namespace HalfGripTools
 			{
 				disabled.Add(id);
 			}
-			Save();
 		}
 
 		internal static Playlist Find(string name)
@@ -57,9 +97,9 @@ namespace HalfGripTools
 		internal static void Pick(Playlist playlist, IEnumerable<string> installed)
 		{
 			disabled.Clear();
-			foreach (string id in installed.Where(id => !playlist.Mods.Contains(id)))
+			foreach (string id in installed)
 			{
-				disabled.Add(id);
+				SetQuietly(id, playlist.Mods.Contains(id));
 			}
 			Active = playlist.Name;
 			Save();
@@ -71,6 +111,7 @@ namespace HalfGripTools
 			disabled.Clear();
 			Active = "";
 			Save();
+			// Workshop mods are left as they are: "all mods" does not give consent for code the player has not switched on.
 		}
 
 		/// <summary>Saves the current choice as a playlist (a unique name is made from <paramref name="name"/>) and selects it.</summary>
@@ -141,6 +182,17 @@ namespace HalfGripTools
 				{
 					disabled.Add(id);
 				}
+				workshopConsent.Clear();
+				if (root.TryGetValue("workshop", out object given) && given is Dictionary<string, object> given2)
+				{
+					foreach (KeyValuePair<string, object> pair in given2)
+					{
+						if (pair.Value is string hash)
+						{
+							workshopConsent[pair.Key] = hash;
+						}
+					}
+				}
 				foreach (Dictionary<string, object> entry in MiniJson.List(root, "playlists").OfType<Dictionary<string, object>>())
 				{
 					string name = MiniJson.String(entry, "name");
@@ -155,7 +207,7 @@ namespace HalfGripTools
 			catch (Exception e)
 			{
 				// Keep what the player wrote: it is only replaced when they next change something.
-				Plugin.Log.LogError($"{Path.GetFileName(FilePath)} could not be read ({e.Message}); all mods stay on and playlists are empty until you change something here.");
+				ModRuntime.Log.LogError($"{Path.GetFileName(FilePath)} could not be read ({e.Message}); all mods stay on and playlists are empty until you change something here.");
 				disabled.Clear();
 				Playlists.Clear();
 				Active = "";
@@ -170,6 +222,7 @@ namespace HalfGripTools
 				Dictionary<string, object> root = new Dictionary<string, object>
 				{
 					["disabled"] = disabled.OrderBy(id => id, StringComparer.Ordinal).Cast<object>().ToList(),
+					["workshop"] = workshopConsent.OrderBy(p => p.Key, StringComparer.Ordinal).ToDictionary(p => p.Key, p => (object)p.Value),
 					["active"] = Active,
 					["playlists"] = Playlists.Select(p => (object)new Dictionary<string, object>
 					{
@@ -181,7 +234,7 @@ namespace HalfGripTools
 			}
 			catch (Exception e)
 			{
-				Plugin.Log.LogError("Could not save the mod manager settings: " + e.Message);
+				ModRuntime.Log.LogError("Could not save the mod manager settings: " + e.Message);
 			}
 		}
 	}

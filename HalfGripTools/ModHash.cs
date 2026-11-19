@@ -105,6 +105,9 @@ namespace HalfGripTools
 		/// <summary>From mod.json: <c>full</c> or <c>restricted</c> (only recorded for now).</summary>
 		public string Trust { get; internal set; }
 
+		/// <summary>Where it was found: local (the Mods folder), legacy (BepInEx\HalfGripMods), extra (a folder from the settings) or workshop:&lt;item id&gt;.</summary>
+		public string Source { get; internal set; }
+
 		/// <summary>The short form for logs, run stats and rooms: <c>id@version:first 8 hash digits</c>.</summary>
 		public string Line => Id + "@" + Version + ":" + Hash.Substring(0, 8);
 	}
@@ -120,7 +123,7 @@ namespace HalfGripTools
 				foreach (ModContext context in ModLoader.Mods.ToArray())
 				{
 					ModManifest m = context.Manifest;
-					list.Add(new LoadedMod { Id = m.id, Version = m.version, Hash = ModHash.OfFolder(context.Folder), Folder = context.Folder, Kind = m.kind, Trust = m.trust });
+					list.Add(new LoadedMod { Id = m.id, Version = m.version, Hash = ModHash.OfFolder(context.Folder), Folder = context.Folder, Kind = m.kind, Trust = m.trust, Source = m.Source });
 				}
 				list.Sort((a, b) => string.CompareOrdinal(a.Id, b.Id));
 				return list;

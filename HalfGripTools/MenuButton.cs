@@ -1,4 +1,3 @@
-using HarmonyLib;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -68,13 +67,13 @@ namespace HalfGripTools
 				ButtonDepth depth = button.GetComponent<ButtonDepth>();
 				if (depth != null)
 				{
-					Traverse.Create(depth).Field("baseY").SetValue(position.y);
+					Reflect.SetField(depth, "baseY", position.y);
 				}
 				button.GetComponent<Image>().sprite = Icon();
 				Button click = button.GetComponent<Button>();
 				click.onClick = new Button.ButtonClickedEvent();
 				click.onClick.AddListener(ModManagerUI.Open);
-				Plugin.Log.LogInfo("Added the mod manager button to the main menu at " + position);
+				ModRuntime.Log.LogInfo("Added the mod manager button to the main menu at " + position);
 				return;
 			}
 		}

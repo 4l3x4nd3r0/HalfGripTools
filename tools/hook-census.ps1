@@ -12,10 +12,11 @@ if (Test-Path "$env:USERPROFILE\.dotnet\dotnet.exe") {
 }
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = "1"
 
-dotnet build "$root\HalfGripTools\HalfGripTools.csproj" -c Release "-p:GameDir=$GameDir" -v q --nologo
-if ($LASTEXITCODE -ne 0) { throw "HalfGripTools does not build" }
-$tools = "$root\dist\BepInEx\plugins\HalfGripTools\HalfGripTools.dll"
+& "$PSScriptRoot\build.ps1" -GameDir $GameDir | Out-Null
+$tools = "$root\dist\standalone\HalfGripTools\HalfGripTools.dll"
+$harmony = "$root\dist\standalone\HalfGripTools\0Harmony.dll"
+if (-not (Test-Path $tools)) { throw "HalfGripTools does not build" }
 
 # bin\ and obj\ next to the project are git-ignored.
-dotnet run --project "$PSScriptRoot\hook-census\HookCensus.csproj" -c Release -v q --nologo -- --mods $ModsPath --game $GameDir --tools $tools --out $Out
+dotnet run --project "$PSScriptRoot\hook-census\HookCensus.csproj" -c Release -v q --nologo -- --mods $ModsPath --game $GameDir --tools $tools --harmony $harmony --out $Out
 if ($LASTEXITCODE -ne 0) { throw "hook census failed" }

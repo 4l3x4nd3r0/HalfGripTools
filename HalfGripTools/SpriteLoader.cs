@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.IO;
-using BepInEx.Logging;
 using UnityEngine;
 
 namespace HalfGripTools
@@ -10,13 +9,13 @@ namespace HalfGripTools
 	{
 		private readonly string folder;
 
-		private readonly ManualLogSource log;
+		private readonly ModLog log;
 
 		private readonly Dictionary<string, Sprite> spriteCache = new Dictionary<string, Sprite>();
 
 		private readonly Dictionary<string, Texture2D> textureCache = new Dictionary<string, Texture2D>();
 
-		internal SpriteLoader(string folder, ManualLogSource log)
+		internal SpriteLoader(string folder, ModLog log)
 		{
 			this.folder = folder;
 			this.log = log;

@@ -1,16 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Core of HalfGripTools: the loader, the mod API, the mod manager. It has no reference to BepInEx. A host starts it:
+       HalfGripTools.BepInEx (a BepInEx plugin) or HalfGripTools.Standalone (Doorstop, no BepInEx), and later the game itself. -->
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>HalfGripTools</AssemblyName>
-    <Version>1.1.0</Version>
+    <Version>2.0.0</Version>
     <RootNamespace>HalfGripTools</RootNamespace>
     <LangVersion>10.0</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <DebugType>none</DebugType>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <!-- Same source and same game build give the same DLL, so anyone can rebuild it and compare the hash with the release. -->
@@ -24,14 +25,17 @@
     <!-- The game is only read from, never written to. Override with -p:GameDir=... if it moves. -->
     <GameDir Condition="'$(GameDir)' == ''">F:\SteamLibrary\steamapps\common\Half Grip Demo</GameDir>
     <ManagedDir>$(GameDir)\HalfGrip_Data\Managed</ManagedDir>
-    <BepInExCore>$(GameDir)\BepInEx\core</BepInExCore>
-
-    <OutDir>$(MSBuildThisFileDir)..\dist\BepInEx\plugins\HalfGripTools\</OutDir>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- The compiler. Pinned to one version, so the DLLs a player downloads are the ones Microsoft published (signed). -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <!-- No Harmony and no injector here. How the game gets patched from outside is HalfGripTools.Harmony's job (it implements IPatchProvider),
+         and how this assembly gets started is a host's job. A host built into the game needs neither: it calls GameHooks. -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="HalfGripTools.Harmony" />
   </ItemGroup>
 
   <ItemGroup>
@@ -47,14 +51,6 @@
       <Private>false</Private>
     </Reference>
     <Reference Include="$(ManagedDir)\Unity.*.dll">
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="BepInEx">
-      <HintPath>$(BepInExCore)\BepInEx.dll</HintPath>
-      <Private>false</Private>
-    </Reference>
-    <Reference Include="0Harmony">
-      <HintPath>$(BepInExCore)\0Harmony.dll</HintPath>
       <Private>false</Private>
     </Reference>
   </ItemGroup>

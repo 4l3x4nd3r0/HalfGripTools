@@ -15,8 +15,8 @@ $id = $Name.ToLowerInvariant() -replace "[^a-z0-9_-]", ""
   "version": "0.1.0",
   "author": "",
   "description": "",
-  "gameVersion": "0.418",
-  "apiVersion": "1.1.0",
+  "gameVersion": "0.419",
+  "apiVersion": "2.0.0",
   "kind": "item",
   "trust": "full",
   "tags": []
@@ -32,9 +32,10 @@ namespace $Name
 		public override void Load(ModContext ctx)
 		{
 			ctx.Log.LogInfo("$Name says hello");
-			// ctx.Config.Bind(...)   settings, saved to BepInEx\config\halfgrip.$id.cfg
+			// ctx.Config.Bind(...)   settings, saved to config\$id.cfg in the data folder
 			// ctx.PatchAll();        apply every [HarmonyPatch] class in this mod
 			// ctx.Items.Add(...)     put an item in the game's catalog
+			// ctx.DataFolder        a folder this mod may write to (never write into the mod's own folder)
 		}
 	}
 }
@@ -57,11 +58,13 @@ $managed = "$GameDir\HalfGrip_Data\Managed"
   <ItemGroup>
     <Compile Include="src\**\*.cs" />
     <Reference Include="$managed\*.dll" Exclude="$managed\mscorlib.dll;$managed\netstandard.dll;$managed\System*.dll" />
-    <Reference Include="$GameDir\BepInEx\core\BepInEx.dll" />
-    <Reference Include="$GameDir\BepInEx\core\0Harmony.dll" />
-    <Reference Include="$GameDir\BepInEx\plugins\HalfGripTools\HalfGripTools.dll" />
+    <!-- The standalone install keeps HalfGripTools next to the game, the BepInEx one inside BepInEx. Use whichever is there. -->
+    <Reference Include="$GameDir\HalfGripTools\HalfGripTools.dll" Condition="Exists('$GameDir\HalfGripTools\HalfGripTools.dll')" />
+    <Reference Include="$GameDir\HalfGripTools\0Harmony.dll" Condition="Exists('$GameDir\HalfGripTools\0Harmony.dll')" />
+    <Reference Include="$GameDir\BepInEx\plugins\HalfGripTools\HalfGripTools.dll" Condition="!Exists('$GameDir\HalfGripTools\HalfGripTools.dll') And Exists('$GameDir\BepInEx\plugins\HalfGripTools\HalfGripTools.dll')" />
+    <Reference Include="$GameDir\BepInEx\core\0Harmony.dll" Condition="!Exists('$GameDir\HalfGripTools\0Harmony.dll') And Exists('$GameDir\BepInEx\core\0Harmony.dll')" />
   </ItemGroup>
 </Project>
 "@ | Set-Content "$dir\$Name.csproj" -Encoding utf8
 "bin/`r`nobj/`r`n.vs/" | Set-Content "$dir\.gitignore" -Encoding ascii
-Write-Host "Created $dir. Copy it to BepInEx\HalfGripMods in the game folder and start the game."
+Write-Host "Created $dir. Copy it to the Mods folder in the game folder (make it if it is not there) and start the game."

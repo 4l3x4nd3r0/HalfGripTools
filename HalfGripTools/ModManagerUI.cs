@@ -106,7 +106,7 @@ namespace HalfGripTools
 			Stretch(panel, 6f);
 
 			Label("Title", panel, "MODS", 84, Color.white, TextAlignmentOptions.TopLeft, new Vector2(48f, -30f), new Vector2(600f, 100f));
-			Label("Credit", panel, "HalfGripTools " + Plugin.Version + " by " + Plugin.Author + "   |   game " + GameVersion.Current, 30, Soft, TextAlignmentOptions.TopRight, new Vector2(-48f, -52f), new Vector2(900f, 40f), right: true);
+			Label("Credit", panel, "HalfGripTools " + ModRuntime.Version + " by " + ModRuntime.Author + "   |   game " + GameVersion.Current, 30, Soft, TextAlignmentOptions.TopRight, new Vector2(-48f, -52f), new Vector2(900f, 40f), right: true);
 			subtitle = Label("Subtitle", panel, "", 34, Soft, TextAlignmentOptions.TopLeft, new Vector2(48f, -128f), new Vector2(1660f, 50f));
 
 			// Left column: playlists.
@@ -169,7 +169,7 @@ namespace HalfGripTools
 
 			int pending = mods.Count(m => ModStore.IsEnabled(m.Manifest.id) != (m.Status == ModStatus.Loaded) && m.Status != ModStatus.Failed && m.Status != ModStatus.NeedsOther);
 			subtitle.text = mods.Count == 0
-				? "No mods are installed. Put mod folders in BepInEx\\HalfGripMods."
+				? "No mods are installed. Put mod folders in the Mods folder next to the game."
 				: $"{mods.Count(m => m.Status == ModStatus.Loaded)} of {mods.Count} running" + (pending > 0 ? $"   |   {pending} change{(pending == 1 ? "" : "s")} waiting for a restart" : "");
 			subtitle.color = pending > 0 ? Amber : Soft;
 
@@ -293,7 +293,7 @@ namespace HalfGripTools
 			}
 			string by = string.IsNullOrEmpty(manifest.author) ? "" : "  by " + manifest.author;
 			Label("Name", row, manifest.DisplayName, 46, Color.white, TextAlignmentOptions.TopLeft, new Vector2(left, -10f), new Vector2(650f, 56f));
-			Label("Info", row, "v" + manifest.version + by, 30, Soft, TextAlignmentOptions.TopLeft, new Vector2(left, -64f), new Vector2(650f, 40f));
+			Label("Info", row, "v" + manifest.version + by + (manifest.Source.StartsWith("workshop") ? "   [Steam Workshop]" : ""), 30, Soft,TextAlignmentOptions.TopLeft, new Vector2(left, -64f), new Vector2(650f, 40f));
 			if (warn)
 			{
 				Label("VersionWarning", row, entry.VersionWarning, 30, Amber, TextAlignmentOptions.TopLeft, new Vector2(24f, -108f), new Vector2(1000f, 40f));			}
@@ -317,7 +317,7 @@ namespace HalfGripTools
 					break;
 				default:
 					bool running = entry.Status == ModStatus.Loaded;
-					status = running == wanted ? (running ? "RUNNING" : "OFF") : (wanted ? "ON AT RESTART" : "OFF AT RESTART");
+					status = running == wanted ? (running ? "RUNNING" : (ModStore.NeedsConsent(manifest.id) ? "OFF: SWITCH ON TO TRUST" : "OFF")) : (wanted ? "ON AT RESTART" : "OFF AT RESTART");
 					statusColor = running == wanted ? (running ? Green : Soft) : Amber;
 					break;
 			}

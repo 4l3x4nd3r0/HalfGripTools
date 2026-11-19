@@ -149,7 +149,7 @@ namespace HalfGripTools
 			Material material = like != null ? new Material(like) : plain != null ? new Material(plain) : null;
 			if (material == null)
 			{
-				Plugin.Log.LogWarning("No material to draw " + name + " with");
+				ModRuntime.Log.LogWarning("No material to draw " + name + " with");
 				return go;
 			}
 			material.name = name;

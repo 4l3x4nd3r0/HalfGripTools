@@ -63,6 +63,9 @@ namespace HalfGripTools
 		/// <summary>The id written in mod.json, set only when another mod already had it and this copy was given a new id.</summary>
 		internal string OriginalId;
 
+		/// <summary>Where the mod was found: "local", "legacy", "extra" or "workshop:&lt;item id&gt;".</summary>
+		internal string Source = "local";
+
 		internal string DisplayName => string.IsNullOrEmpty(name) ? id : name;
 
 		/// <summary>Reads a mod.json. Throws <see cref="FormatException"/> (with line and column) if it is not valid.</summary>

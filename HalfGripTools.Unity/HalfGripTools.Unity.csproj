@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Builds only to prove that HalfGripTools.dll starts with nothing but Unity: no Doorstop, no BepInEx, no Harmony. In the game's Unity project,
+       UnityHost.cs is simply copied in. Not part of the release zips. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>HalfGripTools.UnityHost</AssemblyName>
+    <Version>2.0.0</Version>
+    <RootNamespace>HalfGripTools.UnityHost</RootNamespace>
+    <LangVersion>10.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <DebugType>none</DebugType>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+
+    <GameDir Condition="'$(GameDir)' == ''">F:\SteamLibrary\steamapps\common\Half Grip Demo</GameDir>
+    <ManagedDir>$(GameDir)\HalfGrip_Data\Managed</ManagedDir>
+    <OutDir>$(MSBuildThisFileDir)..\dist\unity\</OutDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HalfGripTools\HalfGripTools.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="$(ManagedDir)\UnityEngine*.dll">
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

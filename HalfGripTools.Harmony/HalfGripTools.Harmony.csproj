@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Harmony side of HalfGripTools: patches the game from outside and turns those patches into calls to GameHooks. A host that cannot or need not
+       patch (a host built into the game, which calls GameHooks directly) does not use this assembly. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <AssemblyName>HalfGripTools.Harmony</AssemblyName>
+    <Version>2.0.0</Version>
+    <RootNamespace>HalfGripTools.HarmonyHost</RootNamespace>
+    <LangVersion>10.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <DebugType>none</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <PathMap>$(MSBuildThisFileDirectory)=/src/</PathMap>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+
+    <GameDir Condition="'$(GameDir)' == ''">F:\SteamLibrary\steamapps\common\Half Grip Demo</GameDir>
+    <ManagedDir>$(GameDir)\HalfGrip_Data\Managed</ManagedDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\HalfGripTools\HalfGripTools.csproj" />
+    <!-- Compiled against only: BepInEx brings its own copy of this exact version, and the standalone host ships it next to itself. -->
+    <PackageReference Include="HarmonyX" Version="2.9.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>$(ManagedDir)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="$(ManagedDir)\UnityEngine*.dll">
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

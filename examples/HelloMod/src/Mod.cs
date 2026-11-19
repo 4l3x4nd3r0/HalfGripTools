@@ -7,7 +7,7 @@ namespace HelloMod
 	{
 		public override void Load(ModContext ctx)
 		{
-			// Saved to BepInEx\config\halfgrip.hellomod.cfg on the first run.
+			// Saved to config\hellomod.cfg in the data folder (next to the game's Player.log) on the first run.
 			var greeting = ctx.Config.Bind("General", "Greeting", "hello", "Written once to the log when the mod loads.");
 			ctx.Log.LogInfo(greeting.Value);
 

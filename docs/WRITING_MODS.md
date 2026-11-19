@@ -1,6 +1,6 @@
 # Writing a mod
 
-A mod is a folder in `BepInEx\HalfGripMods\`. At game start HalfGripTools compiles its C# (if any), reads its JSON items and runs it. You do not build anything and you ship no DLL. What you publish is what people read.
+A mod is a folder in the `Mods` folder next to `HalfGrip.exe` (HalfGripTools 1.x used `BepInEx\HalfGripMods`, which is still read). At game start HalfGripTools compiles its C# (if any), reads its JSON items and runs it. You do not build anything and you ship no DLL. What you publish is what people read.
 
 ```
 MyMod\
@@ -37,7 +37,7 @@ MyMod\
 
 | Field | Meaning |
 |---|---|
-| `id` | Required. Lower case letters, digits, `-`, `_`. Must be unique. Names the config file (`halfgrip.mymod.cfg`) and the compile cache. |
+| `id` | Required. Lower case letters, digits, `-`, `_`. Must be unique. Names the config file (`mymod.cfg`) and the compile cache. |
 | `name`, `version`, `author`, `description` | Shown in the log and in the mod manager. Keep `name` under about 28 characters, the list cuts it. |
 | `requires` | Ids of mods that must load first. If one is missing or off, your mod is skipped. |
 | `gameVersion` | Game version you made it for. `"0.418"` is exactly 0.418. `"0.x"` is any 0.something. `x` must be a whole part, `0.4x` does not work. |
@@ -126,17 +126,18 @@ namespace MyMod
 }
 ```
 
-Compile it without starting the game: `.\tools\check-mods.ps1 -ModsPath .\examples -Mod MyMod`. To run it, copy the folder into `BepInEx\HalfGripMods\` in the game folder, start the game and read `BepInEx\LogOutput.log`.
+Compile it without starting the game: `.\tools\check-mods.ps1 -ModsPath .\examples -Mod MyMod`. To run it, copy the folder into the `Mods` folder in the game folder, start the game and read the log (`HalfGripTools.log` in the data folder, which is `%USERPROFILE%\AppData\LocalLow\Half Games\HalfGrip\Mods`; with the BepInEx host `BepInEx\LogOutput.log`).
 
 ### ModContext
 
 | Member | Meaning |
 |---|---|
-| `Log` | Log source named after your mod. |
-| `Config` | BepInEx config file `BepInEx\config\halfgrip.<id>.cfg`. `Config.Bind(section, key, default, description)`. Section names cannot contain `'` or `"`. |
-| `Folder` | Your mod's folder. |
-| `Harmony` | A Harmony instance owned by your mod. What it patches is undone when mods switch off. |
-| `PatchAll()` | Applies each `[HarmonyPatch]` class on its own. A hook that no longer fits the game is logged and skipped, the rest of the mod keeps working. |
+| `Log` | A `ModLog` named after your mod: `LogInfo`, `LogWarning`, `LogError`, `LogDebug` (2.0; before, BepInEx's `ManualLogSource`, which has the same method names). |
+| `Config` | A `ModConfig`, saved to `config\<id>.cfg` in the data folder, in the format BepInEx used. `Config.Bind(section, key, default, description)` returns a `ModSetting<T>` (`.Value`, `.DefaultValue`, `SettingChanged`). Works for numbers, `bool`, `string` and enums. `Config.Save()` writes at once; new entries are written when `Load` returns. Section and key names cannot contain `=`, quotes or brackets. |
+| `Folder` | Your mod's folder. Read from it, **never write to it**: if the mod comes from Steam's Workshop, Steam owns that folder and replaces it on an update. |
+| `DataFolder` | A folder your mod may write to (`storage\<id>` in the data folder), made the first time you ask for it. Use it for anything the mod has to remember. |
+| `HarmonyId` | The id to give a Harmony instance of your own (`new Harmony(ctx.HarmonyId + ".something")`), for patches `PatchAll` cannot make (a patch on another mod's method, found at run time). Call `UnpatchSelf` from `ctx.OnUnload`. |
+| `PatchAll()` | Applies each `[HarmonyPatch]` class on its own. A hook that no longer fits the game is logged and skipped, the rest of the mod keeps working. Needs a host that can patch (the standalone and BepInEx hosts can; a host built into the game cannot, see [HOSTING.md](HOSTING.md)): there it logs an error and a mod that needs it cannot run. |
 | `OnSceneLoaded(callback)` | Runs after every scene load. |
 | `OnUnload(callback)` | Runs when mods switch off (speedrun mode). |
 | `Sprites` | `LoadSprite(file, like, ppuOverride)` makes a sprite from `sprites\<file>` with the pivot and pixel density of the game sprite `like`. `LoadTexture(file)` returns a point-filtered texture. `Reskin(map, ppu)` swaps sprites by name in the scene. |
@@ -235,6 +236,25 @@ If the host changes to a mode that takes fewer players than the room has, the pl
 
 Your mod appears in the main menu mod manager with its `name`, `version` and `author`. Players can switch it off there, and then `Load` does not run at the next start. If it does not compile, the manager shows `ERROR` and the log has the details. Do not rely on being loaded. If you need another mod, put it in `requires`.
 
+## Porting to 2.0
+
+HalfGripTools 2.0 does not need BepInEx, so a mod can no longer use BepInEx's types. A mod made for 1.x does not compile and the log says so (`uses BepInEx types and was made for HalfGripTools 1.x`). The change is small and mechanical; all thirteen mods in [HalfGripMods](https://github.com/4l3x4nd3r0/HalfGripMods) were ported this way.
+
+| 1.x (BepInEx) | 2.0 |
+|---|---|
+| `using BepInEx.Logging;` | remove it (`using HalfGripTools;` is enough) |
+| `using BepInEx.Configuration;` | remove it |
+| `ManualLogSource` | `ModLog` |
+| `ConfigFile` | `ModConfig` |
+| `ConfigEntry<T>` | `ModSetting<T>` |
+| `ConfigEntryBase` | `ModSetting` |
+| `ctx.Harmony` | `new Harmony(ctx.HarmonyId)`, and `ctx.OnUnload(() => harmony.UnpatchSelf())` |
+| `BepInEx.Paths.ConfigPath` and files next to the config | `ctx.DataFolder` |
+| `"tools": "1.0.6"` in `mod.json` | `"apiVersion": "2.0.0"` (`tools` still works) |
+
+Your settings carry over: the first time 2.0 runs it copies `BepInEx\config\halfgrip.<id>.cfg` to `config\<id>.cfg` in the data folder (the old files are left where they are), and a file a mod kept next to them (`halfgrip.<id>.<name>`) to that mod's `storage\<id>\<name>`. A mod that wrote its own file to the config folder should now write to `ctx.DataFolder`.
+
+Everything else is as before: `HalfGripMod`, `ModContext`, `Items`, `Keys`, `Net`, `Sprites`, `[HarmonyPatch]` classes and `PatchAll()`.
 ## Speedrun mode
 
 You do nothing. With speedrun mode on, your mod is not loaded. If the mode is turned on while the game runs, your patches, items and scene callbacks are removed for you. Only objects your mod put into a scene need cleanup: override `Unload()` (or call `ctx.OnUnload`) and destroy them, as BombRace does.
@@ -243,9 +263,9 @@ Do not change the speedrun setting yourself. Do not keep references to objects t
 
 ## Habits
 
-- Read `BepInEx\LogOutput.log` after every change. Log what you created and what you found: `Created X from 'Y'`.
+- Read the log (`HalfGripTools.log` in the data folder, or `BepInEx\LogOutput.log`) after every change. Log what you created and what you found: `Created X from 'Y'`.
 - Wrap risky work in try/catch and log. One broken feature should not stop the mod.
 - Check for null on game objects. The game updates and things move.
 - Textures must match the size of the sprite they replace. Pixel art uses point filtering.
-- BepInEx keeps an old config value when you change a default. After retuning, edit or delete the `.cfg`, or add a version entry and reset once (SniperRifle does).
-- People read mods before installing. Keep code in plain files, comment why, and avoid network, file and save access. If you write to the save, say so in your README.
+- The config file keeps an old value when you change a default. After retuning, edit or delete the `.cfg`, or add a version entry and reset once (SniperRifle does).
+- People read mods before installing. Keep code in plain files, comment why, and avoid network, file and save access. If you write to the save, say so in your README. Files your mod needs to keep go in `ctx.DataFolder`, nowhere else.

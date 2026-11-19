@@ -1,6 +1,4 @@
 using System;
-using BepInEx.Logging;
-using HarmonyLib;
 using UnityEngine;
 
 namespace HalfGripTools
@@ -13,7 +11,7 @@ namespace HalfGripTools
 	internal static class SpeedrunGuard
 	{
 		/// <summary>True if speedrun mode is on, or if that could not be found out.</summary>
-		internal static bool IsOnOrUnknown(ManualLogSource log)
+		internal static bool IsOnOrUnknown(ModLog log)
 		{
 			try
 			{
@@ -28,43 +26,8 @@ namespace HalfGripTools
 
 		internal static void Notify(string text)
 		{
-			Plugin.Log.LogWarning(text);
+			ModRuntime.Log.LogWarning(text);
 			ToastBehaviour.Show(text);
-		}
-	}
-
-	/// <summary>Turning the mode on in the settings panel calls this setter.</summary>
-	[HarmonyPatch(typeof(Speedrun), nameof(Speedrun.Mode), MethodType.Setter)]
-	internal static class SpeedrunModePatch
-	{
-		private static void Postfix()
-		{
-			if (Speedrun.On)
-			{
-				if (ModLoader.Running)
-				{
-					ModLoader.Shutdown(Plugin.Log);
-					SpeedrunGuard.Notify("Speedrun mode is on: all mods are switched off. Restart the game before a clean speedrun.");
-				}
-			}
-			else if (!ModLoader.Running)
-			{
-				SpeedrunGuard.Notify("Speedrun mode is off. Restart the game to switch the mods back on.");
-			}
-		}
-	}
-
-	/// <summary>A run begins by fingerprinting the catalog: never with mods in it.</summary>
-	[HarmonyPatch(typeof(Speedrun), nameof(Speedrun.BeginRun))]
-	internal static class SpeedrunBeginRunPatch
-	{
-		private static void Prefix()
-		{
-			if (Speedrun.On && ModLoader.Running)
-			{
-				ModLoader.Shutdown(Plugin.Log);
-				SpeedrunGuard.Notify("Speedrun run starting: mods switched off. Restart the game if you want the catalog clean.");
-			}
 		}
 	}
 

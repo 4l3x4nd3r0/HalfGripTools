@@ -61,8 +61,9 @@ namespace HookCensus
 			string game = Arg(args, "--game", @"F:\SteamLibrary\steamapps\common\Half Grip Demo");
 			string tools = Arg(args, "--tools", @"F:\Git\halfGripTools\dist\BepInEx\plugins\HalfGripTools\HalfGripTools.dll");
 			string outFile = Arg(args, "--out", @"F:\Git\HalfGrip\HOOK_CENSUS.md");
+			string harmony = Arg(args, "--harmony", "");
 
-			List<MetadataReference> references = References(game, tools);
+			List<MetadataReference> references = References(game, tools, harmony);
 			Console.WriteLine("References: " + references.Count);
 			foreach (string dir in Directory.GetDirectories(modsPath).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
 			{
@@ -80,7 +81,7 @@ namespace HookCensus
 		}
 
 		/// <summary>The same set the loader compiles against: every managed DLL in the game's Managed folder, BepInEx, Harmony, HalfGripTools.</summary>
-		private static List<MetadataReference> References(string game, string tools)
+		private static List<MetadataReference> References(string game, string tools, string harmony)
 		{
 			List<MetadataReference> list = new List<MetadataReference>();
 			HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -102,6 +103,11 @@ namespace HookCensus
 			foreach (string path in Directory.GetFiles(Path.Combine(game, "HalfGrip_Data", "Managed"), "*.dll"))
 			{
 				Add(path);
+			}
+			// Harmony as given (the one HalfGripTools ships), then BepInEx's types if the game has BepInEx, so a mod made for 1.x can still be read.
+			if (harmony != "")
+			{
+				Add(harmony);
 			}
 			Add(Path.Combine(game, "BepInEx", "core", "BepInEx.dll"));
 			Add(Path.Combine(game, "BepInEx", "core", "0Harmony.dll"));

@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using BepInEx.Configuration;
-using BepInEx.Logging;
-using HarmonyLib;
 using UnityEngine.SceneManagement;
 
 namespace HalfGripTools
@@ -20,7 +17,7 @@ namespace HalfGripTools
 
 		/// <summary>
 		/// Called when mods are switched off while the game runs (speedrun mode turned on). Undo anything the mod added to a scene.
-		/// Harmony patches, items, scene callbacks and <see cref="ModContext.OnUnload"/> callbacks are removed for you.
+		/// Patches, items, scene callbacks and <see cref="ModContext.OnUnload"/> callbacks are removed for you.
 		/// </summary>
 		public virtual void Unload()
 		{
@@ -38,18 +35,26 @@ namespace HalfGripTools
 
 		internal bool Active = true;
 
+		private readonly IModPatcher patcher;
+
 		public ModManifest Manifest { get; }
 
 		/// <summary>The mod's folder (where mod.json is). Sprites and data files are read from here.</summary>
 		public string Folder { get; }
 
-		public ManualLogSource Log { get; }
+		public ModLog Log { get; }
 
-		/// <summary>Settings, saved to <c>BepInEx\config\halfgrip.&lt;id&gt;.cfg</c>.</summary>
-		public ConfigFile Config { get; }
+		/// <summary>Settings, saved to <c>config\&lt;id&gt;.cfg</c> in the data folder (see <see cref="ModRuntime.DataFolder"/>). Bind them in <c>Load</c>.</summary>
+		public ModConfig Config { get; }
 
-		/// <summary>A Harmony instance owned by this mod. Everything patched with it is removed when mods switch off.</summary>
-		public Harmony Harmony { get; }
+		/// <summary>
+		/// A folder the mod may write to, <c>storage\&lt;id&gt;</c> in the data folder, made the first time it is asked for. Use it for anything the mod
+		/// has to remember. Do not write into <see cref="Folder"/>: when the mod comes from Steam's Workshop, Steam owns that folder and replaces it on an update.
+		/// </summary>
+		public string DataFolder => ModPaths.StorageFor(Manifest.id);
+
+		/// <summary>The id to give a Harmony instance of your own (<c>new Harmony(ctx.HarmonyId)</c>), if <see cref="PatchAll"/> is not enough. Call <c>UnpatchSelf</c> from <see cref="OnUnload"/>.</summary>
+		public string HarmonyId => "halfgrip.mod." + Manifest.id;
 
 		/// <summary>Loads PNGs from the mod's <c>sprites</c> folder.</summary>
 		public SpriteLoader Sprites { get; }
@@ -63,13 +68,13 @@ namespace HalfGripTools
 		/// <summary>Talks to the same mod on the other players' machines, and adds game modes, when the Multiplayer mod is installed (1.0.6 and newer). Does nothing without it.</summary>
 		public ModNet Net { get; }
 
-		internal ModContext(ModManifest manifest, ManualLogSource log)
+		internal ModContext(ModManifest manifest, ModLog log)
 		{
 			Manifest = manifest;
 			Folder = manifest.Folder;
 			Log = log;
-			Config = new ConfigFile(Path.Combine(BepInEx.Paths.ConfigPath, "halfgrip." + manifest.id + ".cfg"), true);
-			Harmony = new Harmony("halfgrip.mod." + manifest.id);
+			Config = new ModConfig(Path.Combine(ModPaths.ConfigDir, manifest.id + ".cfg"));
+			patcher = ModRuntime.PatchProvider?.CreatePatcher(manifest.id);
 			Sprites = new SpriteLoader(Path.Combine(Folder, "sprites"), log);
 			Items = new ModItems(this);
 			Keys = new ModKeys(this);
@@ -77,28 +82,19 @@ namespace HalfGripTools
 		}
 
 		/// <summary>
-		/// Applies every <c>[HarmonyPatch]</c> class in the mod. A patch that no longer fits the game is logged and skipped,
-		/// so one broken hook does not take the rest of the mod down.
+		/// Applies every <c>[HarmonyPatch]</c> class in the mod. A patch that no longer fits the game is logged and skipped, so one broken
+		/// hook does not take the rest of the mod down. Needs a host that can patch the game (BepInEx and the standalone host can); in a
+		/// host built into the game it logs an error and does nothing.
 		/// </summary>
 		public void PatchAll()
 		{
-			foreach (Type type in Assembly.GetTypes())
+			if (patcher == null)
 			{
-				if (type.GetCustomAttributes(typeof(HarmonyPatch), false).Length == 0)
-				{
-					continue;
-				}
-				try
-				{
-					Harmony.CreateClassProcessor(type).Patch();
-				}
-				catch (Exception e)
-				{
-					Log.LogError("Patch " + type.Name + " failed and is off: " + e.Message);
-				}
+				Log.LogError("This host cannot patch the game, so [HarmonyPatch] classes are not applied. A mod that needs patches cannot run here.");
+				return;
 			}
+			patcher.PatchAll(Assembly, Log);
 		}
-
 		/// <summary>Calls <paramref name="callback"/> every time a scene has loaded. Stops when mods are switched off.</summary>
 		public void OnSceneLoaded(Action<Scene> callback)
 		{
@@ -129,7 +125,7 @@ namespace HalfGripTools
 			SceneCallbacks.Clear();
 			try
 			{
-				Harmony.UnpatchSelf();
+				patcher?.UnpatchAll();
 			}
 			catch (Exception e)
 			{

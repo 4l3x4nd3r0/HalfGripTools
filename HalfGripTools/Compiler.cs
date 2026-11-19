@@ -6,7 +6,6 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
-using BepInEx.Logging;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -14,7 +13,7 @@ namespace HalfGripTools
 {
 	/// <summary>
 	/// Compiles a mod's C# source with Roslyn, on the player's PC, against the game's own assemblies.
-	/// The result is cached in <c>BepInEx\cache\HalfGripMods</c>, keyed by a hash of the source, the game DLL and this tool's version,
+	/// The result is cached in the data folder (<c>cache</c>), keyed by a hash of the source, the game DLL and this tool's version,
 	/// so a mod only recompiles when something it depends on changed. The cache is never downloaded, only generated here.
 	/// </summary>
 	internal static class Compiler
@@ -24,17 +23,26 @@ namespace HalfGripTools
 		private static string gameHash;
 
 		/// <summary>Returns the compiled mod, or null (with the errors logged) if it does not compile.</summary>
-		internal static Assembly Build(ModManifest manifest, string[] sourceFiles, ManualLogSource log, List<string> errors = null)
+		internal static Assembly Build(ModManifest manifest, string[] sourceFiles, ModLog log, List<string> errors = null)
 		{
-			string cacheDir = Path.Combine(BepInEx.Paths.BepInExRootPath, "cache", "HalfGripMods");
+			string cacheDir = ModPaths.CacheDir;
 			Directory.CreateDirectory(cacheDir);
 
 			string hash = Hash(manifest, sourceFiles);
 			string cached = Path.Combine(cacheDir, manifest.id + "-" + hash + ".dll");
 			if (File.Exists(cached))
 			{
-				log.LogInfo($"{manifest.DisplayName}: using the cached build ({Path.GetFileName(cached)})");
-				return Assembly.Load(File.ReadAllBytes(cached));
+				try
+				{
+					Assembly fromCache = Assembly.Load(File.ReadAllBytes(cached));
+					log.LogInfo($"{manifest.DisplayName}: using the cached build ({Path.GetFileName(cached)})");
+					return fromCache;
+				}
+				catch (Exception e)
+				{
+					// Half written by another game that is starting at the same time, or damaged: compile again.
+					log.LogWarning($"{manifest.DisplayName}: the cached build could not be used ({e.GetType().Name}); compiling again");
+				}
 			}
 
 			Stopwatch watch = Stopwatch.StartNew();
@@ -71,7 +79,17 @@ namespace HalfGripTools
 				{
 					TryDelete(old);
 				}
-				File.WriteAllBytes(cached, bytes);
+				try
+				{
+					// Written under another name and moved into place, so a second game starting now never reads half a file.
+					string temp = cached + "." + Process.GetCurrentProcess().Id + ".tmp";
+					File.WriteAllBytes(temp, bytes);
+					File.Move(temp, cached);
+				}
+				catch (Exception e)
+				{
+					log.LogWarning($"{manifest.DisplayName}: the compiled build could not be cached ({e.Message}); it runs this time and is compiled again next start");
+				}
 				log.LogInfo($"{manifest.DisplayName}: compiled {sourceFiles.Length} files in {watch.ElapsedMilliseconds} ms");
 				return Assembly.Load(bytes);
 			}
@@ -93,7 +111,7 @@ namespace HalfGripTools
 			return $"{path}({span.StartLinePosition.Line + 1},{span.StartLinePosition.Character + 1}): {d.Id} {d.GetMessage()}";
 		}
 
-		private static List<MetadataReference> References(ManualLogSource log)
+		private static List<MetadataReference> References(ModLog log)
 		{
 			if (references != null)
 			{
@@ -122,9 +140,12 @@ namespace HalfGripTools
 			{
 				Add(path);
 			}
-			string core = Path.Combine(BepInEx.Paths.BepInExRootPath, "core");
-			Add(Path.Combine(core, "BepInEx.dll"));
-			Add(Path.Combine(core, "0Harmony.dll"));
+			// The patching API of the host, if it has one (Harmony), so mods with [HarmonyPatch] classes compile; and this assembly, which is the mod API.
+			Assembly patchApi = ModRuntime.PatchProvider?.Api;
+			if (patchApi != null)
+			{
+				Add(patchApi.Location);
+			}
 			Add(typeof(Compiler).Assembly.Location);
 			log.LogInfo("Compiler references: " + references.Count + " assemblies");
 			return references;

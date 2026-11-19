@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Text;
-using HarmonyLib;
 
 namespace HalfGripTools
 {
@@ -12,36 +10,26 @@ namespace HalfGripTools
 	/// text that is stored and uploaded; this inserts <c>"mods":["id@version:hash8",...]</c> before its closing brace. Loaded with the loader even
 	/// in speedrun mode, where it sends <c>"mods":[]</c> because no mod is running. Any error leaves the text as the game made it.
 	/// </summary>
-	[HarmonyPatch]
-	internal static class RunStatsPatch
+	internal static class RunStatsMods
 	{
 		// Names are cut and the list is capped: the server rejects a run over 64 KB and the game trims runs to about 60 KB.
 		private const int MaxMods = 60;
 
 		private const int MaxEntryLength = 80;
 
-		// Fit is private and takes a private nested type, so it is found by name.
-		private static MethodBase TargetMethod()
-		{
-			return AccessTools.Method(typeof(RunStats), "Fit");
-		}
-
-		private static void Postfix(ref string __result)
+		/// <summary>The text <c>RunStats.Fit</c> made, with the mods added. On any problem the text is returned as it was. (Reached through <see cref="GameHooks.RunStatsFit"/>.)</summary>
+		internal static string Apply(string json)
 		{
 			try
 			{
-				string text = AddMods(__result);
-				if (text != null)
-				{
-					__result = text;
-				}
+				return AddMods(json) ?? json;
 			}
 			catch (Exception e)
 			{
-				Plugin.Log.LogWarning("Could not add the mod list to the run stats: " + e.Message);
+				ModRuntime.Log.LogWarning("Could not add the mod list to the run stats: " + e.Message);
+				return json;
 			}
 		}
-
 		/// <summary>Returns <paramref name="json"/> with the mods field added, or null if it is not a JSON object or already has one.</summary>
 		private static string AddMods(string json)
 		{
