@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 namespace HalfGripTools
@@ -21,11 +21,11 @@ namespace HalfGripTools
 		/// <summary>How much of the speed into a bending rail comes back out (0 = a wall that kills it, 0.05 = barely any).</summary>
 		public float Bounce = 0.05f;
 
-		/// <summary>A hit at least this steep (degrees) breaks the rail if the car is also going at least <see cref="BreakAngleSpeed"/>, even when the speed into the rail is under <see cref="BreakInto"/>.</summary>
-		public float BreakAngle = 40f;
+		/// <summary>A hit at least this steep (degrees) breaks the rail if the car is going faster than <see cref="BreakAngleSpeed"/> on the dash. Anything else that is not a scrape bends.</summary>
+		public float BreakAngle = 45f;
 
-		/// <summary>The dash speed that, at <see cref="BreakAngle"/> or steeper, is enough to break the rail.</summary>
-		public float BreakAngleSpeed = 100f;
+		/// <summary>The dash speed above which a hit at <see cref="BreakAngle"/> or steeper breaks the rail.</summary>
+		public float BreakAngleSpeed = 120f;
 
 		/// <summary>The share of its speed the car keeps when it breaks through (the game's own tree keeps 0.6).</summary>
 		public float BreakKeep = 0.6f;
@@ -92,14 +92,16 @@ namespace HalfGripTools
 				return v;
 			}
 			v.Angle = Mathf.Asin(Mathf.Clamp01(intoDash / Mathf.Max(speed, intoDash))) * Mathf.Rad2Deg;
-			if (intoDash >= tuning.BreakInto || (v.Angle >= tuning.BreakAngle && speed >= tuning.BreakAngleSpeed && intoDash >= tuning.BendMinInto))
+			// By angle and the car's own speed on the dash: a scrape (under GlanceAngle) slides; a steep hit (BreakAngle or more) above
+			// BreakAngleSpeed breaks; every other hit that is more than a touch bends.
+			if (v.Angle >= tuning.BreakAngle && speed >= tuning.BreakAngleSpeed + 0.5f)
 			{
 				v.Outcome = GuardrailOutcome.Break;
 			}
-			else if (intoDash >= tuning.BendMinInto && v.Angle >= tuning.GlanceAngle)
+			else if (v.Angle >= tuning.GlanceAngle && intoDash >= tuning.BendMinInto)
 			{
 				v.Outcome = GuardrailOutcome.Bend;
-				v.BendAmount = 0.15f + 0.55f * Mathf.Clamp01(intoDash / Mathf.Max(1f, tuning.BreakInto));
+				v.BendAmount = 0.15f + 0.55f * Mathf.Clamp01(speed / Mathf.Max(1f, tuning.BreakAngleSpeed + 70f));
 			}
 			else
 			{

@@ -28,9 +28,9 @@ namespace HalfGripTools.MapBuild
 		internal static float BreakSpeed = 120f;
 
 		/// <summary>A hit this steep (degrees) at BreakAngleSpeed or more breaks the rail.</summary>
-		internal static float BreakAngle = 40f;
+		internal static float BreakAngle = 45f;
 
-		internal static float BreakAngleSpeed = 100f;
+		internal static float BreakAngleSpeed = 120f;
 
 		/// <summary>What a bending hit costs the car, in dash units.</summary>
 		internal static float BendSpeedLoss = 5f;
