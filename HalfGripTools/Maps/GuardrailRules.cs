@@ -21,6 +21,12 @@ namespace HalfGripTools
 		/// <summary>How much of the speed into a bending rail comes back out (0 = a wall that kills it, 0.05 = barely any).</summary>
 		public float Bounce = 0.05f;
 
+		/// <summary>A hit at least this steep (degrees) breaks the rail if the car is also going at least <see cref="BreakAngleSpeed"/>, even when the speed into the rail is under <see cref="BreakInto"/>.</summary>
+		public float BreakAngle = 40f;
+
+		/// <summary>The dash speed that, at <see cref="BreakAngle"/> or steeper, is enough to break the rail.</summary>
+		public float BreakAngleSpeed = 100f;
+
 		/// <summary>The share of its speed the car keeps when it breaks through (the game's own tree keeps 0.6).</summary>
 		public float BreakKeep = 0.6f;
 	}
@@ -86,7 +92,7 @@ namespace HalfGripTools
 				return v;
 			}
 			v.Angle = Mathf.Asin(Mathf.Clamp01(intoDash / Mathf.Max(speed, intoDash))) * Mathf.Rad2Deg;
-			if (intoDash >= tuning.BreakInto)
+			if (intoDash >= tuning.BreakInto || (v.Angle >= tuning.BreakAngle && speed >= tuning.BreakAngleSpeed && intoDash >= tuning.BendMinInto))
 			{
 				v.Outcome = GuardrailOutcome.Break;
 			}

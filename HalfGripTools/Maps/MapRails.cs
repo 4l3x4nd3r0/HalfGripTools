@@ -27,6 +27,11 @@ namespace HalfGripTools.MapBuild
 		/// <summary>From this speed into the rail it breaks.</summary>
 		internal static float BreakSpeed = 120f;
 
+		/// <summary>A hit this steep (degrees) at BreakAngleSpeed or more breaks the rail.</summary>
+		internal static float BreakAngle = 40f;
+
+		internal static float BreakAngleSpeed = 100f;
+
 		/// <summary>What a bending hit costs the car, in dash units.</summary>
 		internal static float BendSpeedLoss = 5f;
 
@@ -369,6 +374,8 @@ namespace HalfGripTools.MapBuild
 			tuning.GlanceAngle = RailRules.GlanceAngle;
 			tuning.BendMinInto = RailRules.BendMinSpeed;
 			tuning.BreakInto = RailRules.BreakSpeed;
+			tuning.BreakAngle = RailRules.BreakAngle;
+			tuning.BreakAngleSpeed = RailRules.BreakAngleSpeed;
 			tuning.BendLossDash = RailRules.BendSpeedLoss;
 			tuning.Bounce = RailRules.Bounce;
 			tuning.BreakKeep = RailRules.BreakSpeedKept;

@@ -80,6 +80,8 @@ namespace HalfGripTools
 			RailRules.GlanceAngle = settings.Bind("Guardrail", "GlanceAngle", 12f, "For maps made from a file: under this angle (degrees) between the car's path and the guardrail it only scrapes along it, at any speed: no bend, no loss.").Value;
 			RailRules.BendMinSpeed = settings.Bind("Guardrail", "BendMinSpeed", 15f, "The least speed into the guardrail (the part of the speed that points at it, the dash's number) that bends it.").Value;
 			RailRules.BreakSpeed = settings.Bind("Guardrail", "BreakSpeed", 120f, "The speed into the guardrail from which it breaks, with crash damage. Speed into the rail is the speed times the sine of the angle.").Value;
+			RailRules.BreakAngle = settings.Bind("Guardrail", "BreakAngle", 40f, "A hit at least this steep (degrees) breaks the guardrail when the car is also going BreakAngleSpeed or more.").Value;
+			RailRules.BreakAngleSpeed = settings.Bind("Guardrail", "BreakAngleSpeed", 100f, "The dash speed that, at BreakAngle or steeper, is enough to break the guardrail.").Value;
 			RailRules.BendSpeedLoss = settings.Bind("Guardrail", "BendSpeedLoss", 5f, "Speed a bending hit costs, in dash units.").Value;
 			RailRules.Bounce = settings.Bind("Guardrail", "Bounce", 0.05f, "How much of the speed into a bending rail comes back out (0 to 1): a soft push back.").Value;
 			RailRules.BreakSpeedKept = settings.Bind("Guardrail", "BreakSpeedKept", 0.6f, "Share of its speed a car keeps when it breaks through a rail (the game's own tree keeps 0.6).").Value;
