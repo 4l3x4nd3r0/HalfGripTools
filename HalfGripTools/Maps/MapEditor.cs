@@ -77,6 +77,7 @@ namespace HalfGripTools
 		private string nameField = "";
 		private string saveAsField = "";
 		private bool armedNew;
+		private bool uiPress;
 		private bool menuOpen;
 
 		// the start grid: the automatic one (shown until you change it) and what is selected
@@ -165,6 +166,7 @@ namespace HalfGripTools
 			{
 				ModRuntime.Log.LogWarning("Map Maker: could not look for the game's props: " + e.Message);
 			}
+			BuildUi();
 			string shots = Environment.GetEnvironmentVariable("HALFGRIPTOOLS_MAPSHOT");
 			if (!string.IsNullOrEmpty(shots))
 			{
@@ -257,6 +259,7 @@ namespace HalfGripTools
 				return;
 			}
 			open = false;
+			DestroyUi();
 			if (brushRoot != null)
 			{
 				UnityEngine.Object.Destroy(brushRoot);
@@ -334,6 +337,7 @@ namespace HalfGripTools
 
 		private void Update()
 		{
+			UiTick();
 			if (!open)
 			{
 				// In a race on a map made from a file, the key takes you into the editor (the race is loaded again with the editor open).
@@ -360,7 +364,7 @@ namespace HalfGripTools
 				HideBrush();
 				return;
 			}
-			bool typing = focused == "nameField" || focused == "saveAsField";
+			bool typing = uiTyping;
 			Flying(typing);
 			if (typing)
 			{
@@ -386,7 +390,15 @@ namespace HalfGripTools
 			}
 			if (ctrl && Input.GetKeyDown(KeyCode.Y)) Redo();
 
-			bool overUi = IsOverUi() || GUIUtility.hotControl != 0;
+			if (Input.GetMouseButtonDown(0))
+			{
+				uiPress = IsOverUi();
+			}
+			if (!Input.GetMouseButton(0))
+			{
+				uiPress = false;
+			}
+			bool overUi = IsOverUi() || uiPress || GUIUtility.hotControl != 0;
 			// A click on a track point, a prop, a start spot or the lights picks it up whichever of those tools is showing.
 			if (!dragging && !overUi && Input.GetMouseButtonDown(0) && (tool == Tool.Track || tool == Tool.Props || tool == Tool.Start))
 			{
@@ -1206,10 +1218,6 @@ namespace HalfGripTools
 		private void OnGUI()
 		{
 			DrawUi();
-			if (pendingShot != null && Event.current.type == EventType.Repaint)
-			{
-				TakeUiShot();
-			}
 		}
 
 		private void DrawUi()
@@ -1235,73 +1243,6 @@ namespace HalfGripTools
 				focused = GUI.GetNameOfFocusedControl();
 			}
 			DrawGizmos();
-			if (menuOpen)
-			{
-				leftPanel = bottomPanel = Rect.zero;
-				DrawMenu(Screen.width / k, Screen.height / k);
-				return;
-			}
-
-			leftPanel = new Rect(10, 10, 290, Mathf.Min(Screen.height / k - 20f, 600f));
-			GUI.Box(leftPanel, GUIContent.none);
-			GUILayout.BeginArea(new Rect(leftPanel.x + 8, leftPanel.y + 6, leftPanel.width - 16, leftPanel.height - 12));
-			GUILayout.Label("<color=#ff5a46>MAP MAKER</color>  " + doc.Name, small);
-			tool = (Tool)GUILayout.SelectionGrid((int)tool, ToolNames, 3);
-			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("UNDO (Ctrl+Z)")) { Undo(); }
-			if (GUILayout.Button("REDO (Ctrl+Y)")) { Redo(); }
-			GUILayout.EndHorizontal();
-			GUILayout.Space(4);
-			switch (tool)
-			{
-				case Tool.Track: TrackPanel(); break;
-				case Tool.Props: PropsPanel(); break;
-				case Tool.Terrain: TerrainPanel(); break;
-				case Tool.Start: StartPanel(); break;
-				default: MapPanel(); break;
-			}
-			GUILayout.EndArea();
-
-			float w = Screen.width / k;
-			bottomPanel = new Rect(310, Screen.height / k - 34f, w - 320f, 24f);
-			GUI.Box(bottomPanel, GUIContent.none);
-			string help = Time.unscaledTime < statusUntil ? status : "Esc menu   1-4 tools   T top view   Right mouse: look   WASD/QE fly   Scroll: speed";
-			GUI.Label(new Rect(bottomPanel.x + 6, bottomPanel.y + 2, bottomPanel.width - 12, 20), help, small);
-		}
-
-		/// <summary>The Esc menu: the way out of the editor.</summary>
-		private void DrawMenu(float width, float height)
-		{
-			GUI.color = new Color(0f, 0f, 0f, 0.6f);
-			GUI.DrawTexture(new Rect(0, 0, width, height), white);
-			GUI.color = Color.white;
-			Rect box = new Rect(width * 0.5f - 160f, height * 0.5f - 170f, 320f, 340f);
-			GUI.Box(box, GUIContent.none);
-			GUILayout.BeginArea(new Rect(box.x + 16, box.y + 12, box.width - 32, box.height - 24));
-			GUILayout.Label("<color=#ff5a46>MAP MAKER</color>  " + doc.Name, small);
-			GUILayout.Space(6);
-			if (GUILayout.Button("RESUME", GUILayout.Height(34))) { menuOpen = false; }
-			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("UNDO", GUILayout.Height(30))) { Undo(); }
-			if (GUILayout.Button("REDO", GUILayout.Height(30))) { Redo(); }
-			GUILayout.EndHorizontal();
-			if (GUILayout.Button("SAVE", GUILayout.Height(34))) { DoSave(); menuOpen = false; }
-			if (GUILayout.Button("TEST DRIVE", GUILayout.Height(34))) { DoTest(); }
-			if (GUILayout.Button(MapMaker.Standalone ? "SAVE AND QUIT EDITOR" : "SAVE AND LEAVE EDITOR", GUILayout.Height(34)))
-			{
-				try
-				{
-					Save();
-					QuitEditor();
-				}
-				catch (Exception e)
-				{
-					Say("Could not save: " + e.Message);
-					menuOpen = false;
-				}
-			}
-			if (GUILayout.Button(MapMaker.Standalone ? "QUIT EDITOR WITHOUT SAVING" : "LEAVE EDITOR WITHOUT SAVING", GUILayout.Height(34))) { QuitEditor(); }
-			GUILayout.EndArea();
 		}
 
 		/// <summary>Out of the editor. Started from the menu: back to the main menu, nothing of a run touched. Opened with F10 in a race: the race goes on without the editor.</summary>
@@ -1400,66 +1341,6 @@ namespace HalfGripTools
 			GUI.color = Color.white;
 		}
 
-		private float Slide(string label, float value, float min, float max, string format = "0")
-		{
-			GUILayout.BeginHorizontal();
-			GUILayout.Label(label + " " + value.ToString(format), small, GUILayout.Width(120));
-			value = GUILayout.HorizontalSlider(value, min, max);
-			GUILayout.EndHorizontal();
-			return value;
-		}
-
-		private bool Toggle(string label, bool value)
-		{
-			return GUILayout.Toggle(value, label);
-		}
-
-		private void TrackPanel()
-		{
-			GUILayout.Label("Click empty ground: add a point (on the road: between). Drag a point to move it. Delete removes it. [ ] or PgUp/PgDn change its height.", small);
-			GUILayout.Label("Points: " + doc.Track.Count + "   Lap: " + Spline.Length(world.Dense).ToString("0") + " units", small);
-			if (selPoint < 0 || selPoint >= doc.Track.Count)
-			{
-				GUILayout.Label("No point selected.", small);
-				return;
-			}
-			MapPoint p = doc.Track[selPoint];
-			GUILayout.Label("Point " + selPoint + (selPoint == 0 ? " (the start line)" : ""), small);
-			bool changed = false;
-			float width = Slide("Width", p.Width, 12f, 120f);
-			if (Math.Abs(width - p.Width) > 0.01f) { p.Width = Mathf.Round(width); changed = true; }
-			GUILayout.BeginHorizontal();
-			GUILayout.Label("Height " + p.Y.ToString("0.0"), small, GUILayout.Width(120));
-			if (GUILayout.Button("-5")) { p.Y -= 5f; changed = true; }
-			if (GUILayout.Button("-1")) { p.Y -= 1f; changed = true; }
-			if (GUILayout.Button("+1")) { p.Y += 1f; changed = true; }
-			if (GUILayout.Button("+5")) { p.Y += 5f; changed = true; }
-			GUILayout.EndHorizontal();
-			if (GUILayout.Button("Surface: " + p.Surface.ToUpper() + "  (click to change)")) { p.Surface = Surfaces.Next(p.Surface, 1); changed = true; }
-			bool rl = Toggle("Guardrail left", p.RailLeft), rr = Toggle("Guardrail right", p.RailRight);
-			bool wl = Toggle("Invisible wall left", p.WallLeft), wr = Toggle("Invisible wall right", p.WallRight);
-			if (rl != p.RailLeft || rr != p.RailRight || wl != p.WallLeft || wr != p.WallRight)
-			{
-				p.RailLeft = rl; p.RailRight = rr; p.WallLeft = wl; p.WallRight = wr;
-				changed = true;
-			}
-			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Rails: all on")) { SetAll(t => { t.RailLeft = true; t.RailRight = true; }); }
-			if (GUILayout.Button("all off")) { SetAll(t => { t.RailLeft = false; t.RailRight = false; }); }
-			GUILayout.EndHorizontal();
-			GUILayout.BeginHorizontal();
-			if (GUILayout.Button("Walls: all on")) { SetAll(t => { t.WallLeft = true; t.WallRight = true; }); }
-			if (GUILayout.Button("all off")) { SetAll(t => { t.WallLeft = false; t.WallRight = false; }); }
-			GUILayout.EndHorizontal();
-			if (GUILayout.Button("Same width everywhere")) { float w = p.Width; SetAll(t => t.Width = w); }
-			if (GUILayout.Button("Delete point")) { DeletePoint(); }
-			if (changed)
-			{
-				dirtyTrack = true;
-				rebuildAt = 0f;
-			}
-		}
-
 		private void SetAll(Action<MapPoint> change)
 		{
 			foreach (MapPoint t in doc.Track)
@@ -1468,128 +1349,6 @@ namespace HalfGripTools
 			}
 			dirtyTrack = true;
 			rebuildAt = 0f;
-		}
-
-		private void PropsPanel()
-		{
-			GUILayout.Label("Pick a kind, click the ground to place it. Click a prop to select and drag it. R / F turn it, Delete removes it.", small);
-			propType = PropPicker(propType, 150);
-			propScale = Slide("Size", propScale, 0.4f, 4f, "0.0");
-			propRot = Slide("Turn", propRot, 0f, 359f);
-			GUILayout.Label("Props: " + doc.Props.Count + " of " + MapDocument.MaxProps, small);
-			if (selProp >= 0 && selProp < doc.Props.Count)
-			{
-				MapProp p = doc.Props[selProp];
-				GUILayout.Label("Selected: " + p.Type, small);
-				float rot = Slide("Turn", p.Rot, 0f, 359f);
-				float scale = Slide("Size", p.Scale, 0.4f, 4f, "0.0");
-				if (Math.Abs(rot - p.Rot) > 0.01f || Math.Abs(scale - p.Scale) > 0.001f)
-				{
-					p.Rot = rot;
-					p.Scale = scale;
-					dirtyProps = true;
-				}
-				if (GUILayout.Button("Delete prop"))
-				{
-					doc.Props.RemoveAt(selProp);
-					selProp = -1;
-					dirtyProps = true;
-					rebuildAt = 0f;
-				}
-			}
-		}
-
-		private void StartPanel()
-		{
-			GUILayout.Label("The start grid and the lights. Drag a place or the lights to move them. Click empty ground to add a place (one more AI car each, up to " + MapDocument.MaxSpots + "). Delete removes the selected one. Cars face along the start line.", small);
-			GUILayout.Label((doc.Spots.Count > 0 ? "Your grid: " : "Automatic grid: ") + ShownSpots.Count + " places (P is yours)." + (doc.HasLights ? "  Lights moved." : ""), small);
-			if (!selLights && selSpot > 0 && GUILayout.Button("Delete place " + selSpot)) { DeleteSpot(); }
-			if (GUILayout.Button("Automatic grid again")) { doc.Spots.Clear(); selSpot = -1; }
-			if (GUILayout.Button("Lights back behind the line")) { doc.HasLights = false; selLights = false; }
-			GUILayout.Label("Test drive to see the cars on their places.", small);
-		}
-
-		private void TerrainPanel()
-		{
-			GUILayout.Label("Hold the left mouse on the ground. The ring is the brush: the inner ring is where it is strongest. The ground is always pressed down under the road.", small);
-			brushMode = GUILayout.SelectionGrid(brushMode, BrushNames, 3);
-			brushRadius = Slide("Size", brushRadius, 20f, 260f);
-			if (brushMode <= 3)
-			{
-				brushStrength = Slide("Strength", brushStrength, 0.1f, 2f, "0.0");
-				GUILayout.Label(brushMode == 0 ? "Raises the ground. A faint dome shows how much." : brushMode == 1 ? "Digs the ground down." : brushMode == 2 ? "Smooths bumps." : "Pulls the ground to the height under the first click; the plate shows it.", small);
-			}
-			else if (brushMode == 4)
-			{
-				GUILayout.Label("Paint the ground. Painted ground drives like it looks: ice is slippery, sand drags.", small);
-				paintKind = GUILayout.SelectionGrid(paintKind, MapBuild.GroundTypes.Names.Select(n => n.ToUpper()).ToArray(), 3);
-				if (GUILayout.Button("Paint everything with " + MapBuild.GroundTypes.Names[paintKind].ToUpper()))
-				{
-					MapTerrain t = doc.Terrain;
-					t.Paint = new byte[t.Verts * t.Verts];
-					for (int i = 0; i < t.Paint.Length; i++) { t.Paint[i] = (byte)paintKind; }
-					dirtyTerrain = true;
-					rebuildAt = 0f;
-				}
-			}
-			else
-			{
-				GUILayout.Label("Scatter props over the ground, off the road. Pick what to scatter:", small);
-				scatterType = PropPicker(scatterType, 110);
-				scatterDensity = Slide("Density", scatterDensity, 0.1f, 2f, "0.0");
-				propScale = Slide("Size", propScale, 0.4f, 4f, "0.0");
-				GUILayout.Label("Props: " + doc.Props.Count + " of " + MapDocument.MaxProps, small);
-			}
-			if (GUILayout.Button("Flatten everything"))
-			{
-				Array.Clear(doc.Terrain.Heights, 0, doc.Terrain.Heights.Length);
-				dirtyTerrain = true;
-				rebuildAt = 0f;
-			}
-		}
-
-		private void MapPanel()
-		{
-			GUILayout.Label("Name", small);
-			GUI.SetNextControlName("nameField");
-			nameField = GUILayout.TextField(nameField, 40);
-			if (GUILayout.Button("Weather: " + doc.Weather.ToUpper() + "  (click to change)"))
-			{
-				int i = Array.IndexOf(MapDocument.WeatherNames, doc.Weather);
-				doc.Weather = MapDocument.WeatherNames[(i + 1) % MapDocument.WeatherNames.Length];
-				Say("Weather: " + doc.Weather + ". Test drive to see it.");
-			}
-			GUILayout.Space(6);
-			if (GUILayout.Button("SAVE")) { DoSave(); }
-			GUILayout.Label("Save as a new map:", small);
-			GUI.SetNextControlName("saveAsField");
-			saveAsField = GUILayout.TextField(saveAsField ?? "", 40);
-			if (GUILayout.Button("SAVE AS")) { DoSaveAs(); }
-			if (GUILayout.Button("EXPORT AS A MOD FOLDER")) { DoExport(); }
-			GUILayout.Space(6);
-			if (GUILayout.Button("TEST DRIVE (saves, then starts a race on the map)")) { DoTest(); }
-			GUILayout.Space(6);
-			if (GUILayout.Button(armedNew ? "Really start over with a new oval?" : "New oval (start over)"))
-			{
-				if (!armedNew)
-				{
-					armedNew = true;
-				}
-				else
-				{
-					armedNew = false;
-					MapDocument fresh = MapDocument.Oval(doc.Id, doc.Name);
-					doc.Track.Clear();
-					doc.Track.AddRange(fresh.Track);
-					doc.Props.Clear();
-					Array.Clear(doc.Terrain.Heights, 0, doc.Terrain.Heights.Length);
-					selPoint = selProp = -1;
-					dirtyTrack = dirtyProps = true;
-					rebuildAt = 0f;
-				}
-			}
-			if (GUILayout.Button("CLOSE EDITOR (race as it stands)")) { MapEditor.Close(); }
-			GUILayout.Label("Saved maps live in " + MapLibrary.UserFolder + ". Your own maps join your runs when the game starts.", small);
 		}
 	}
 }

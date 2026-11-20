@@ -305,38 +305,6 @@ namespace HalfGripTools
 			return false;
 		}
 
-		/// <summary>A scrolling list of everything that can be placed, by category: the built-in shapes, then the game's pieces and other mods'.</summary>
-		private string PropPicker(string current, int height)
-		{
-			if (propCategory == null)
-			{
-				propCategory = "Shapes";
-			}
-			MapBuild.MapPropCatalog.DiscoverGame();
-			var categories = new List<string> { "Shapes" };
-			categories.AddRange(MapBuild.MapPropCatalog.All.Select(p => p.Category).Distinct());
-			int ci = Mathf.Max(0, categories.IndexOf(propCategory));
-			ci = GUILayout.SelectionGrid(ci, categories.Select(n => n.ToUpper()).ToArray(), 2);
-			propCategory = categories[ci];
-			string[] ids, names;
-			if (propCategory == "Shapes")
-			{
-				ids = MapBuild.PropTypes.Names;
-				names = ids.Select(n => n.ToUpper()).ToArray();
-			}
-			else
-			{
-				List<MapBuild.CatalogProp> list = MapBuild.MapPropCatalog.All.Where(p => p.Category == propCategory).ToList();
-				ids = list.Select(p => p.Id).ToArray();
-				names = list.Select(p => p.Name.ToUpper()).ToArray();
-			}
-			propScroll = GUILayout.BeginScrollView(propScroll, GUILayout.Height(height));
-			int index = Array.IndexOf(ids, current);
-			int pick = GUILayout.SelectionGrid(index, names, 2);
-			GUILayout.EndScrollView();
-			return pick >= 0 && pick < ids.Length ? ids[pick] : current;
-		}
-
 		// ---- test aid: pictures of the real screen, panels included ----------------------------------------------------------------
 
 		/// <summary>A mouse position to use instead of the real one (the test aid has no mouse).</summary>
@@ -351,34 +319,22 @@ namespace HalfGripTools
 
 		private System.Collections.IEnumerator ScreenShot(string path)
 		{
-			// A headless game has no screen to capture, so the next repaint draws the scene and the panels into a texture instead.
-			if (Application.isBatchMode)
-			{
-				// A headless game never calls OnGUI, so there is no picture of the panels to take.
-				yield break;
-			}
-			pendingShot = path;
-			float until = Time.realtimeSinceStartup + 5f;
-			while (pendingShot != null && Time.realtimeSinceStartup < until)
-			{
-				yield return null;
-			}
-			pendingShot = null;
-		}
-
-		private void TakeUiShot()
-		{
-			string path = pendingShot;
-			pendingShot = null;
-			RenderTexture target = RenderTexture.GetTemporary(Screen.width, Screen.height, 24);
+			// Let the canvas lay itself out, then draw the scene and the canvas into a texture through the editor camera.
+			yield return null;
+			yield return null;
+			Canvas.ForceUpdateCanvases();
+			RenderTexture target = RenderTexture.GetTemporary(1920, 1080, 24);
 			RenderTexture previous = RenderTexture.active;
+			RenderMode mode = canvas.renderMode;
 			try
 			{
+				canvas.renderMode = RenderMode.ScreenSpaceCamera;
+				canvas.worldCamera = cam;
+				canvas.planeDistance = cam.nearClipPlane + 0.5f;
 				cam.targetTexture = target;
 				cam.Render();
 				cam.targetTexture = null;
 				RenderTexture.active = target;
-				DrawUi();
 				var picture = new Texture2D(target.width, target.height, TextureFormat.RGB24, false);
 				picture.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
 				picture.Apply();
@@ -392,9 +348,11 @@ namespace HalfGripTools
 			finally
 			{
 				cam.targetTexture = null;
+				canvas.renderMode = mode;
 				RenderTexture.active = previous;
 				RenderTexture.ReleaseTemporary(target);
 			}
+			yield return null;
 		}
 
 		/// <summary>Walks the tools with a pretend mouse and saves the screen each time (<c>HALFGRIPTOOLS_MAPSHOT</c>), to check the panels, the brush ring and the painted ground without a window.</summary>

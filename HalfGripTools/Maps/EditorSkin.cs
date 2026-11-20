@@ -17,7 +17,7 @@ namespace HalfGripTools.MapBuild
 		private static Texture2D captured;
 		private static RectOffset capturedBorder;
 		private static Font font;
-		private static Texture2D redNormal, redOver, redPressed;
+		private static Texture2D redNormal, redOver, redPressed, darkTex, panelTex, fieldTex;
 
 		/// <summary>Copies the red button's picture out of the main menu. Cheap to call again; does nothing once it has one.</summary>
 		internal static void TryCapture()
@@ -117,6 +117,17 @@ namespace HalfGripTools.MapBuild
 			return captured != null ? "the game's own button" : "drawn in code";
 		}
 
+		/// <summary>The pictures the uGUI panels are made of: the red button (and its border), and nine-slice dark, panel and text-field pictures.</summary>
+		internal static void Textures(out Texture2D red, out RectOffset border, out Texture2D dark, out Texture2D panel, out Texture2D field)
+		{
+			Get();
+			red = redNormal;
+			border = capturedBorder ?? new RectOffset(3, 3, 3, 3);
+			dark = darkTex;
+			panel = panelTex;
+			field = fieldTex;
+		}
+
 		internal static GUISkin Get()
 		{
 			if (skin == null)
@@ -180,6 +191,9 @@ namespace HalfGripTools.MapBuild
 			Texture2D darkHover = Tinted(dark, 1.5f);
 			Texture2D panel = Nine(new Color(0.06f, 0.06f, 0.08f, 0.93f), new Color(0.06f, 0.06f, 0.08f, 0.93f), new Color(0.06f, 0.06f, 0.08f, 0.93f), new Color(0.5f, 0.1f, 0.1f, 1f));
 			Texture2D field = Nine(new Color(0.03f, 0.03f, 0.04f), new Color(0.03f, 0.03f, 0.04f), new Color(0.03f, 0.03f, 0.04f), new Color(0.4f, 0.4f, 0.45f));
+			darkTex = dark;
+			panelTex = panel;
+			fieldTex = field;
 			Texture2D fieldFocus = Nine(new Color(0.03f, 0.03f, 0.04f), new Color(0.03f, 0.03f, 0.04f), new Color(0.03f, 0.03f, 0.04f), new Color(0.95f, 0.3f, 0.25f));
 
 			GUIStyle label = skin.label;

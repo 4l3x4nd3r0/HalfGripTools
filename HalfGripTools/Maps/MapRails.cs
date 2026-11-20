@@ -31,7 +31,7 @@ namespace HalfGripTools.MapBuild
 		internal static float BendSpeedLoss = 5f;
 
 		/// <summary>The share of the speed into a bending rail that comes back out.</summary>
-		internal static float Bounce = 0.25f;
+		internal static float Bounce = 0.05f;
 
 		/// <summary>The share of its speed a car keeps when it breaks through (the game's tree keeps 0.6).</summary>
 		internal static float BreakSpeedKept = 0.6f;
@@ -187,7 +187,7 @@ namespace HalfGripTools.MapBuild
 		/// <summary>A damaged piece: each beam is two halves that meet in a point pushed away from the road, the middle post leans out with it.</summary>
 		private static void BentPiece(Batch steel, Batch posts, RailPiece p, Quaternion rot, float beam, float b)
 		{
-			float bow = b * 1.1f;
+			float bow = b * 3.4f;
 			BentBeam(steel, p, 0.85f, beam, bow);
 			BentBeam(steel, p, 1.6f, beam, bow);
 			Vector3 axis = Vector3.Cross(Vector3.up, p.Out);
@@ -198,7 +198,7 @@ namespace HalfGripTools.MapBuild
 				{
 					foot += p.Out * bow;
 				}
-				Quaternion lean = Quaternion.AngleAxis(b * (k == 0 ? 20f : 8f), axis);
+				Quaternion lean = Quaternion.AngleAxis(b * (k == 0 ? 32f : 14f), axis);
 				Vector3 centre = foot + lean * (rot * new Vector3(0f, -0.45f, 0f));
 				posts.Box(centre, new Vector3(0.18f, 5.1f, 0.18f), lean * rot);
 			}
@@ -435,6 +435,10 @@ namespace HalfGripTools.MapBuild
 				{
 					AddBend(touched[n], verdict.BendAmount, false);
 				}
+				for (int n = 0; n < touched.Count; n++)
+				{
+					BendBeside(touched[n], verdict.BendAmount);
+				}
 				v = GuardrailRules.AfterBend(car, v, tuning);
 			}
 			if (shift.sqrMagnitude > 1e-8f)
@@ -464,6 +468,23 @@ namespace HalfGripTools.MapBuild
 				}
 			}
 			return best;
+		}
+
+		/// <summary>A bend spreads along the rail: the two pieces either side bow half as much and then a quarter as much, so the dent has a shape.</summary>
+		private void BendBeside(int piece, float amount)
+		{
+			for (int dir = 0; dir < 2; dir++)
+			{
+				int n = dir == 0 ? pieces[piece].Prev : pieces[piece].Next;
+				for (int depth = 0; depth < 2 && n >= 0; depth++)
+				{
+					if (!broken[n])
+					{
+						AddBend(n, amount * (depth == 0 ? 0.55f : 0.28f), true);
+					}
+					n = dir == 0 ? pieces[n].Prev : pieces[n].Next;
+				}
+			}
 		}
 
 		private void BendAround(int piece)

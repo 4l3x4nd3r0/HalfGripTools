@@ -18,8 +18,8 @@ namespace HalfGripTools
 		/// <summary>What a bending hit costs the car, in dash units of speed.</summary>
 		public float BendLossDash = 5f;
 
-		/// <summary>How much of the speed into a bending rail comes back out (0 = a wall that kills it, 0.25 = a soft push back).</summary>
-		public float Bounce = 0.25f;
+		/// <summary>How much of the speed into a bending rail comes back out (0 = a wall that kills it, 0.05 = barely any).</summary>
+		public float Bounce = 0.05f;
 
 		/// <summary>The share of its speed the car keeps when it breaks through (the game's own tree keeps 0.6).</summary>
 		public float BreakKeep = 0.6f;
