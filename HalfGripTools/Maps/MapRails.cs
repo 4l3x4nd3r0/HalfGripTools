@@ -18,17 +18,23 @@ namespace HalfGripTools.MapBuild
 	/// <summary>The rules for how a rail treats a car, in the numbers the dash shows. Set from the loader's settings.</summary>
 	internal static class RailRules
 	{
-		/// <summary>Up to this speed into the rail (the dash's number) the rail holds like a wall.</summary>
-		internal static float ContainSpeed = 90f;
+		/// <summary>Under this angle between the car's path and the rail, it slides along it: no bend, no loss, at any speed.</summary>
+		internal static float GlanceAngle = 12f;
 
-		/// <summary>From this speed the rail breaks. Between the two it holds, bends and costs the car some speed.</summary>
+		/// <summary>The least speed into the rail (the dash's number) that bends it.</summary>
+		internal static float BendMinSpeed = 15f;
+
+		/// <summary>From this speed into the rail it breaks.</summary>
 		internal static float BreakSpeed = 120f;
 
-		/// <summary>Share of the car's speed lost at the top of the bending band.</summary>
-		internal static float BendSpeedLoss = 0.2f;
+		/// <summary>What a bending hit costs the car, in dash units.</summary>
+		internal static float BendSpeedLoss = 5f;
 
-		/// <summary>Share of the car's speed each broken piece takes.</summary>
-		internal static float SpeedLossPerPiece = 0.3f;
+		/// <summary>The share of the speed into a bending rail that comes back out.</summary>
+		internal static float Bounce = 0.25f;
+
+		/// <summary>The share of its speed a car keeps when it breaks through (the game's tree keeps 0.6).</summary>
+		internal static float BreakSpeedKept = 0.6f;
 
 		internal static bool LogHits;
 	}
@@ -345,14 +351,28 @@ namespace HalfGripTools.MapBuild
 			}
 			Vector3 v = velocity;
 			int hits = ResolveRails(car, body, centre, forward, right, ref v);
-			// Pieces that gave way take the same share of the car's speed each; broken in one step they count in full for the first two and a
-			// third as much after that (a broadside crossing is one barrier).
-			if (hits > 0 || v != velocity)
+			if (v != velocity)
 			{
-				float keep = 1f - Mathf.Clamp01(RailRules.SpeedLossPerPiece);
-				float counted = hits <= 2 ? hits : 2f + 0.35f * (hits - 2);
-				body.linearVelocity = v * Mathf.Pow(keep, counted);
+				body.linearVelocity = v;
 			}
+		}
+
+		private static GuardrailTuning tuning;
+
+		/// <summary>The guardrail rule's numbers (see <see cref="GuardrailRules"/>), from the loader's settings.</summary>
+		private static GuardrailTuning Tuning()
+		{
+			if (tuning == null)
+			{
+				tuning = new GuardrailTuning();
+			}
+			tuning.GlanceAngle = RailRules.GlanceAngle;
+			tuning.BendMinInto = RailRules.BendMinSpeed;
+			tuning.BreakInto = RailRules.BreakSpeed;
+			tuning.BendLossDash = RailRules.BendSpeedLoss;
+			tuning.Bounce = RailRules.Bounce;
+			tuning.BreakKeep = RailRules.BreakSpeedKept;
+			return tuning;
 		}
 
 		/// <summary>The direction from the car to the rail piece, across the road: the piece's outward normal, turned round for a car that is already outside it.</summary>
@@ -364,16 +384,16 @@ namespace HalfGripTools.MapBuild
 		/// <summary>See <see cref="RailRules"/>. Returns how many pieces broke.</summary>
 		private int ResolveRails(CarControllerNew car, Rigidbody body, Vector3 centre, Vector3 forward, Vector3 right, ref Vector3 v)
 		{
-			float contain = Mathf.Max(1f, RailRules.ContainSpeed);
-			float limit = Mathf.Max(contain + 1f, RailRules.BreakSpeed);
+			GuardrailTuning tuning = Tuning();
 			Vector3 v0 = v;
-			float impact = 0f;
+			float into = 0f;
 			for (int n = 0; n < touched.Count; n++)
 			{
-				impact = Mathf.Max(impact, Vector3.Dot(v0, Toward(pieces[touched[n]], centre)) * Dash);
+				into = Mathf.Max(into, Vector3.Dot(v0, Toward(pieces[touched[n]], centre)) * Dash);
 			}
+			GuardrailVerdict verdict = GuardrailRules.Judge(v0, into, tuning);
 
-			if (impact >= limit)
+			if (verdict.Outcome == GuardrailOutcome.Break)
 			{
 				for (int n = 0; n < touched.Count; n++)
 				{
@@ -386,19 +406,22 @@ namespace HalfGripTools.MapBuild
 				{
 					BendAround(touched[n]);
 				}
-				LogHit(car, impact, "break", touched.Count, v0, v0);
+				v = GuardrailRules.AfterBreak(car, v0, into, tuning, out float damage);
+				LogHit(car, into, "break at " + verdict.Angle.ToString("0") + " deg, " + damage.ToString("0") + " damage", touched.Count, v0, v);
 				return touched.Count;
 			}
 
+			// The rail holds the car in: the speed into it is taken away, all of it for a scrape, all but a soft push back for a bend.
+			float bounce = verdict.Outcome == GuardrailOutcome.Bend ? tuning.Bounce : 0f;
 			Vector3 shift = Vector3.zero;
 			for (int n = 0; n < touched.Count; n++)
 			{
 				RailPiece p = pieces[touched[n]];
 				Vector3 toward = Toward(p, centre);
-				float into = Vector3.Dot(v, toward);
-				if (into > 0f)
+				float closing = Vector3.Dot(v, toward);
+				if (closing > 0f)
 				{
-					v -= toward * into;
+					v -= toward * closing * (1f + bounce);
 				}
 				float pen = Penetration(p, centre + shift, forward, right, toward);
 				if (pen > 0f)
@@ -406,22 +429,21 @@ namespace HalfGripTools.MapBuild
 					shift -= toward * (pen + 0.05f);
 				}
 			}
-			if (impact > contain)
+			if (verdict.Outcome == GuardrailOutcome.Bend)
 			{
-				float t = Mathf.Clamp01((impact - contain) / (limit - contain));
 				for (int n = 0; n < touched.Count; n++)
 				{
-					AddBend(touched[n], 0.25f + 0.5f * t, false);
+					AddBend(touched[n], verdict.BendAmount, false);
 				}
-				v *= 1f - Mathf.Clamp01(RailRules.BendSpeedLoss) * t;
+				v = GuardrailRules.AfterBend(car, v, tuning);
 			}
 			if (shift.sqrMagnitude > 1e-8f)
 			{
 				body.position = body.position + Vector3.ClampMagnitude(shift, 2.5f);
 			}
-			if (impact > 5f)
+			if (into > 5f)
 			{
-				LogHit(car, impact, impact > contain ? "bend" : "hold", touched.Count, v0, v);
+				LogHit(car, into, (verdict.Outcome == GuardrailOutcome.Bend ? "bend" : "slide") + " at " + verdict.Angle.ToString("0") + " deg", touched.Count, v0, v);
 			}
 			return 0;
 		}

@@ -157,6 +157,35 @@ namespace HalfGripTools
 			{
 				mod.Items.Inject(catalog);
 			}
+			if (System.Environment.GetEnvironmentVariable("HALFGRIPTOOLS_DUMPITEMS") == "1")
+			{
+				DumpEnginesAndTires(catalog);
+			}
+		}
+
+		/// <summary>For tuning: logs every engine and tire in the catalog with the numbers that set how it drives (<c>HALFGRIPTOOLS_DUMPITEMS=1</c>).</summary>
+		private static void DumpEnginesAndTires(ItemCatalog catalog)
+		{
+			foreach (UpgradeComponent item in catalog.items)
+			{
+				if (item is EngineUpgrade engine)
+				{
+					ModRuntime.Log.LogInfo($"[engine] id={engine.id} image={(engine.image != null ? engine.image.rect.width + "x" + engine.image.rect.height : "none")} tier={engine.tier} cost={engine.cost} speedMultiplier={engine.speedMultiplier} engineAccel={engine.engineAccel} stats={Boosts(engine)}");
+				}
+				else if (item is TireUpgrade tire)
+				{
+					ModRuntime.Log.LogInfo($"[tire] id={tire.id} image={(tire.image != null ? tire.image.rect.width + "x" + tire.image.rect.height : "none")} tier={tire.tier} cost={tire.cost} tireGrip={tire.tireGrip} load={tire.loadSensitivity} brakeBias={tire.brakeBias} weather={tire.weatherHandling} stats={Boosts(tire)}");
+				}
+			}
+		}
+
+		private static string Boosts(UpgradeComponent item)
+		{
+			if (item.statBoosts == null || item.statBoosts.Count == 0)
+			{
+				return "-";
+			}
+			return string.Join(", ", item.statBoosts.Select(b => b.stat + " " + b.amount + (b.addsToBase ? " flat" : "")));
 		}
 	}
 }

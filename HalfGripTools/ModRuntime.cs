@@ -85,6 +85,10 @@ namespace HalfGripTools
 			MapLibrary.LoadUserMaps();
 			ModLoader.LoadAll(Log);
 			Log.LogInfo("Loaded HalfGripTools " + Version + " with " + ModLoader.Mods.Count + " mod(s)");
+			if (Environment.GetEnvironmentVariable("HALFGRIPTOOLS_RAILTABLE") == "1")
+			{
+				Log.LogInfo(GuardrailRules.Table(new GuardrailTuning()));
+			}
 
 			// A host that starts late (the standalone one starts when the first scene is up) missed the scenes that are already loaded.
 			for (int i = 0; i < SceneManager.sceneCount; i++)
