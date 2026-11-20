@@ -86,6 +86,21 @@ namespace HalfGripTools
 			MapRegistry.Add(info);
 		}
 
+		/// <summary>
+		/// Offers a piece the Map Maker can place: <paramref name="build"/> makes a new copy of it, active and with no parent, at the size the map asks for
+		/// (1 is normal). The id goes into the map file, so keep it: <c>mymod.container</c>. Taken out again when the mod is switched off; a map that uses
+		/// an id nobody provides just leaves the piece out.
+		/// </summary>
+		public void AddProp(string id, string name, string category, Func<float, GameObject> build)
+		{
+			if (string.IsNullOrEmpty(id) || build == null)
+			{
+				ctx.Log.LogError("Maps: a prop needs an id and a build function.");
+				return;
+			}
+			MapBuild.MapPropCatalog.Add(new MapBuild.CatalogProp { Id = id.ToLowerInvariant().Replace(' ', '_'), Name = name, Category = string.IsNullOrEmpty(category) ? ctx.Manifest.DisplayName : category, Make = build, Owner = ctx });
+		}
+
 		internal void RemoveAll()
 		{
 			foreach (MapInfo info in mine)
@@ -93,6 +108,7 @@ namespace HalfGripTools
 				MapRegistry.Remove(info);
 			}
 			mine.Clear();
+			MapBuild.MapPropCatalog.RemoveOwned(ctx);
 		}
 	}
 

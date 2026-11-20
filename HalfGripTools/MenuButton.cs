@@ -43,6 +43,7 @@ namespace HalfGripTools
 		/// <summary>Adds the button to the main menu if this scene has one and it is not there yet.</summary>
 		internal static void TryAttach()
 		{
+			HalfGripTools.MapBuild.EditorSkin.TryCapture();
 			if (button != null)
 			{
 				return;

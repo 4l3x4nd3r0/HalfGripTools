@@ -41,7 +41,7 @@ namespace HalfGripTools
 		}
 	}
 
-	internal sealed class EditorBehaviour : MonoBehaviour
+	internal sealed partial class EditorBehaviour : MonoBehaviour
 	{
 		private enum Tool { Track, Props, Terrain, Map, Start }
 
@@ -63,7 +63,7 @@ namespace HalfGripTools
 		private float dragHeight;
 		private string propType = "tree";
 		private float propRot, propScale = 1f;
-		private int brushMode;          // 0 raise, 1 lower, 2 smooth, 3 flatten
+		private int brushMode;          // 0 raise, 1 lower, 2 smooth, 3 flatten, 4 paint, 5 scatter
 		private float brushRadius = 90f, brushStrength = 0.6f;
 		private float flattenTo;
 		private bool painting;
@@ -100,7 +100,7 @@ namespace HalfGripTools
 		private Rect leftPanel, bottomPanel;
 
 		private static readonly string[] ToolNames = { "TRACK", "PROPS", "TERRAIN", "MAP", "START" };
-		private static readonly string[] BrushNames = { "RAISE", "LOWER", "SMOOTH", "FLATTEN" };
+		private static readonly string[] BrushNames = { "RAISE", "LOWER", "SMOOTH", "FLATTEN", "PAINT", "SCATTER" };
 
 		internal void Init(MapWorld w, MapDocument d, TrackManager t, MapInfo i)
 		{
@@ -156,6 +156,15 @@ namespace HalfGripTools
 			pitch = 24f;
 			Say("MAP MAKER: right mouse look, WASD fly, Q/E down/up, shift faster, T top view");
 			ModRuntime.Log.LogInfo("Map Maker opened on " + doc.Name + " (time held, free camera). File: " + (doc.Path.Length > 0 ? doc.Path : "none"));
+			// The game's own pickups, hazards and scenery that this scene has, for the props list.
+			try
+			{
+				MapBuild.MapPropCatalog.DiscoverGame();
+			}
+			catch (Exception e)
+			{
+				ModRuntime.Log.LogWarning("Map Maker: could not look for the game's props: " + e.Message);
+			}
 			string shots = Environment.GetEnvironmentVariable("HALFGRIPTOOLS_MAPSHOT");
 			if (!string.IsNullOrEmpty(shots))
 			{
@@ -207,6 +216,7 @@ namespace HalfGripTools
 			{
 				ModRuntime.Log.LogWarning("Map Maker: shot failed: " + e.Message);
 			}
+			yield return StartCoroutine(UiShots(folder));
 		}
 
 		private void CloseUp(string folder, string name, Func<MapPoint, bool> wanted)
@@ -247,6 +257,11 @@ namespace HalfGripTools
 				return;
 			}
 			open = false;
+			if (brushRoot != null)
+			{
+				UnityEngine.Object.Destroy(brushRoot);
+				brushRoot = null;
+			}
 			ModRuntime.Log.LogInfo("Map Maker closed (time released)");
 			TimeScale.Hold(this, false);
 			GameInput.Mute(this, false);
@@ -342,6 +357,7 @@ namespace HalfGripTools
 			FreeCursor();
 			if (menuOpen)
 			{
+				HideBrush();
 				return;
 			}
 			bool typing = focused == "nameField" || focused == "saveAsField";
@@ -386,6 +402,14 @@ namespace HalfGripTools
 				case Tool.Props: PropsTool(overUi); break;
 				case Tool.Terrain: TerrainTool(overUi); break;
 				case Tool.Start: StartTool(overUi); break;
+			}
+			if (tool == Tool.Terrain)
+			{
+				BrushTick(overUi);
+			}
+			else
+			{
+				HideBrush();
 			}
 			Flush();
 			UndoTick();
@@ -439,7 +463,7 @@ namespace HalfGripTools
 		private bool Pick(out Vector3 worldPoint, bool ignoreProps = false)
 		{
 			Transform propsRoot = ignoreProps ? world.PropsRoot : null;
-			Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+			Ray ray = cam.ScreenPointToRay(MouseNow());
 			RaycastHit[] hits = Physics.RaycastAll(ray, 9000f, ~0, QueryTriggerInteraction.Ignore);
 			Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 			foreach (RaycastHit hit in hits)
@@ -465,7 +489,7 @@ namespace HalfGripTools
 		/// <summary>Where the mouse ray crosses the horizontal plane at <paramref name="height"/> (world), for dragging.</summary>
 		private bool PickPlane(float height, out Vector3 worldPoint)
 		{
-			Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+			Ray ray = cam.ScreenPointToRay(MouseNow());
 			float enter;
 			if (new Plane(Vector3.up, new Vector3(0f, height, 0f)).Raycast(ray, out enter))
 			{
@@ -993,12 +1017,28 @@ namespace HalfGripTools
 				painting = true;
 				flattenTo = t.At(Mathf.RoundToInt((c.x + t.Size * 0.5f) / t.Cell), Mathf.RoundToInt((c.z + t.Size * 0.5f) / t.Cell));
 			}
+			if (brushMode == 5)
+			{
+				if (Time.unscaledTime >= nextScatter)
+				{
+					nextScatter = Time.unscaledTime + 0.3f;
+					Scatter(c);
+				}
+				return;
+			}
 			if (Time.unscaledTime < nextPaint)
 			{
 				return;
 			}
 			nextPaint = Time.unscaledTime + 0.05f;
-			Paint(t, c);
+			if (brushMode == 4)
+			{
+				PaintGround(t, c);
+			}
+			else
+			{
+				Paint(t, c);
+			}
 			dirtyTerrain = true;
 		}
 
@@ -1165,15 +1205,30 @@ namespace HalfGripTools
 
 		private void OnGUI()
 		{
+			DrawUi();
+			if (pendingShot != null && Event.current.type == EventType.Repaint)
+			{
+				TakeUiShot();
+			}
+		}
+
+		private void DrawUi()
+		{
 			if (!open || cam == null || world == null || world.Root == null)
 			{
 				return;
 			}
 			float k = UiScale();
 			GUI.matrix = Matrix4x4.Scale(new Vector3(k, k, 1f));
+			GUISkin themed = MapBuild.EditorSkin.Get();
+			if (GUI.skin != themed)
+			{
+				GUI.skin = themed;
+				small = null;
+			}
 			if (small == null)
 			{
-				small = new GUIStyle(GUI.skin.label) { fontSize = 12, wordWrap = true };
+				small = new GUIStyle(GUI.skin.label) { wordWrap = true };
 			}
 			if (Event.current.type == EventType.Repaint)
 			{
@@ -1187,12 +1242,10 @@ namespace HalfGripTools
 				return;
 			}
 
-			leftPanel = new Rect(10, 10, 270, Mathf.Min(Screen.height / k - 20f, 560f));
-			GUI.color = new Color(0f, 0f, 0f, 0.72f);
-			GUI.DrawTexture(leftPanel, white);
-			GUI.color = Color.white;
+			leftPanel = new Rect(10, 10, 290, Mathf.Min(Screen.height / k - 20f, 600f));
+			GUI.Box(leftPanel, GUIContent.none);
 			GUILayout.BeginArea(new Rect(leftPanel.x + 8, leftPanel.y + 6, leftPanel.width - 16, leftPanel.height - 12));
-			GUILayout.Label("<b>MAP MAKER</b>  " + doc.Name, small);
+			GUILayout.Label("<color=#ff5a46>MAP MAKER</color>  " + doc.Name, small);
 			tool = (Tool)GUILayout.SelectionGrid((int)tool, ToolNames, 3);
 			GUILayout.BeginHorizontal();
 			if (GUILayout.Button("UNDO (Ctrl+Z)")) { Undo(); }
@@ -1210,10 +1263,8 @@ namespace HalfGripTools
 			GUILayout.EndArea();
 
 			float w = Screen.width / k;
-			bottomPanel = new Rect(290, Screen.height / k - 34f, w - 300f, 24f);
-			GUI.color = new Color(0f, 0f, 0f, 0.6f);
-			GUI.DrawTexture(bottomPanel, white);
-			GUI.color = Color.white;
+			bottomPanel = new Rect(310, Screen.height / k - 34f, w - 320f, 24f);
+			GUI.Box(bottomPanel, GUIContent.none);
 			string help = Time.unscaledTime < statusUntil ? status : "Esc menu   1-4 tools   T top view   Right mouse: look   WASD/QE fly   Scroll: speed";
 			GUI.Label(new Rect(bottomPanel.x + 6, bottomPanel.y + 2, bottomPanel.width - 12, 20), help, small);
 		}
@@ -1225,11 +1276,9 @@ namespace HalfGripTools
 			GUI.DrawTexture(new Rect(0, 0, width, height), white);
 			GUI.color = Color.white;
 			Rect box = new Rect(width * 0.5f - 160f, height * 0.5f - 170f, 320f, 340f);
-			GUI.color = new Color(0.08f, 0.08f, 0.1f, 0.96f);
-			GUI.DrawTexture(box, white);
-			GUI.color = Color.white;
+			GUI.Box(box, GUIContent.none);
 			GUILayout.BeginArea(new Rect(box.x + 16, box.y + 12, box.width - 32, box.height - 24));
-			GUILayout.Label("<b>MAP MAKER</b>  " + doc.Name, small);
+			GUILayout.Label("<color=#ff5a46>MAP MAKER</color>  " + doc.Name, small);
 			GUILayout.Space(6);
 			if (GUILayout.Button("RESUME", GUILayout.Height(34))) { menuOpen = false; }
 			GUILayout.BeginHorizontal();
@@ -1424,9 +1473,7 @@ namespace HalfGripTools
 		private void PropsPanel()
 		{
 			GUILayout.Label("Pick a kind, click the ground to place it. Click a prop to select and drag it. R / F turn it, Delete removes it.", small);
-			int index = Array.IndexOf(PropTypes.Names, propType);
-			int pick = GUILayout.SelectionGrid(index < 0 ? 0 : index, PropTypes.Names.Select(n => n.ToUpper()).ToArray(), 3);
-			propType = PropTypes.Names[pick];
+			propType = PropPicker(propType, 150);
 			propScale = Slide("Size", propScale, 0.4f, 4f, "0.0");
 			propRot = Slide("Turn", propRot, 0f, 359f);
 			GUILayout.Label("Props: " + doc.Props.Count + " of " + MapDocument.MaxProps, small);
@@ -1464,10 +1511,35 @@ namespace HalfGripTools
 
 		private void TerrainPanel()
 		{
-			GUILayout.Label("Hold the left mouse on the ground to paint. The ground is always pressed down under the road, so hills never cover it.", small);
-			brushMode = GUILayout.SelectionGrid(brushMode, BrushNames, 2);
+			GUILayout.Label("Hold the left mouse on the ground. The ring is the brush: the inner ring is where it is strongest. The ground is always pressed down under the road.", small);
+			brushMode = GUILayout.SelectionGrid(brushMode, BrushNames, 3);
 			brushRadius = Slide("Size", brushRadius, 20f, 260f);
-			brushStrength = Slide("Strength", brushStrength, 0.1f, 2f, "0.0");
+			if (brushMode <= 3)
+			{
+				brushStrength = Slide("Strength", brushStrength, 0.1f, 2f, "0.0");
+				GUILayout.Label(brushMode == 0 ? "Raises the ground. A faint dome shows how much." : brushMode == 1 ? "Digs the ground down." : brushMode == 2 ? "Smooths bumps." : "Pulls the ground to the height under the first click; the plate shows it.", small);
+			}
+			else if (brushMode == 4)
+			{
+				GUILayout.Label("Paint the ground. Painted ground drives like it looks: ice is slippery, sand drags.", small);
+				paintKind = GUILayout.SelectionGrid(paintKind, MapBuild.GroundTypes.Names.Select(n => n.ToUpper()).ToArray(), 3);
+				if (GUILayout.Button("Paint everything with " + MapBuild.GroundTypes.Names[paintKind].ToUpper()))
+				{
+					MapTerrain t = doc.Terrain;
+					t.Paint = new byte[t.Verts * t.Verts];
+					for (int i = 0; i < t.Paint.Length; i++) { t.Paint[i] = (byte)paintKind; }
+					dirtyTerrain = true;
+					rebuildAt = 0f;
+				}
+			}
+			else
+			{
+				GUILayout.Label("Scatter props over the ground, off the road. Pick what to scatter:", small);
+				scatterType = PropPicker(scatterType, 110);
+				scatterDensity = Slide("Density", scatterDensity, 0.1f, 2f, "0.0");
+				propScale = Slide("Size", propScale, 0.4f, 4f, "0.0");
+				GUILayout.Label("Props: " + doc.Props.Count + " of " + MapDocument.MaxProps, small);
+			}
 			if (GUILayout.Button("Flatten everything"))
 			{
 				Array.Clear(doc.Terrain.Heights, 0, doc.Terrain.Heights.Length);

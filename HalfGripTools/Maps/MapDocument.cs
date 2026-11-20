@@ -105,6 +105,33 @@ namespace HalfGripTools.MapBuild
 
 		internal float[] Heights;
 
+		/// <summary>The kind of ground at every vertex: an index into <see cref="GroundTypes.Names"/> (0 is plain grass). Null means all grass.</summary>
+		internal byte[] Paint;
+
+		internal bool HasPaint
+		{
+			get
+			{
+				if (Paint == null)
+				{
+					return false;
+				}
+				for (int i = 0; i < Paint.Length; i++)
+				{
+					if (Paint[i] != 0)
+					{
+						return true;
+					}
+				}
+				return false;
+			}
+		}
+
+		internal byte PaintAt(int index)
+		{
+			return Paint == null || index < 0 || index >= Paint.Length ? (byte)0 : Paint[index];
+		}
+
 		internal float Cell { get { return Size / Cells; } }
 
 		internal int Verts { get { return Cells + 1; } }
@@ -115,6 +142,10 @@ namespace HalfGripTools.MapBuild
 			if (Heights == null || Heights.Length != n)
 			{
 				Heights = new float[n];
+			}
+			if (Paint != null && Paint.Length != n)
+			{
+				Paint = null;
 			}
 		}
 
@@ -311,6 +342,7 @@ namespace HalfGripTools.MapBuild
 				doc.Terrain.Size = Mathf.Clamp(MiniJson.Number(t, "size", 1600f), 200f, 4000f);
 				doc.Terrain.Cells = Mathf.Clamp((int)MiniJson.Number(t, "cells", 160f), 16, 256);
 				doc.Terrain.Heights = Unpack(MiniJson.String(t, "heights"), doc.Terrain.Verts * doc.Terrain.Verts);
+				doc.Terrain.Paint = GroundTypes.Unpack(MiniJson.String(t, "paint"), doc.Terrain.Verts * doc.Terrain.Verts);
 			}
 			doc.Terrain.Ensure();
 			return doc;
@@ -420,10 +452,15 @@ namespace HalfGripTools.MapBuild
 				root["grid"] = grid;
 			}
 			Terrain.Ensure();
-			root["terrain"] = new Dictionary<string, object>
+			var terrain = new Dictionary<string, object>
 			{
 				{ "size", Round(Terrain.Size) }, { "cells", Terrain.Cells }, { "heights", Pack(Terrain.Heights) }
 			};
+			if (Terrain.HasPaint)
+			{
+				terrain["paint"] = GroundTypes.Pack(Terrain.Paint);
+			}
+			root["terrain"] = terrain;
 			return MiniJson.Write(root);
 		}
 

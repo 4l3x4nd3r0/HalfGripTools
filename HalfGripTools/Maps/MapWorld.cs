@@ -343,37 +343,88 @@ namespace HalfGripTools.MapBuild
 					verts[index] = new Vector3(-half + ix * cell, y, -half + iz * cell);
 				}
 			}
-			var tris = new int[t.Cells * t.Cells * 6];
-			int k = 0;
+			// One ground object per kind of ground that is painted (grass where nothing is), each with its own colour, collider and grip, so painted
+			// dirt, sand, snow and ice drive like they look. They share the vertices; only the triangles differ.
+			int kinds = GroundTypes.Names.Length;
+			var perKind = new List<int>[kinds];
 			for (int iz = 0; iz < t.Cells; iz++)
 			{
 				for (int ix = 0; ix < t.Cells; ix++)
 				{
 					int a = iz * vn + ix, b = a + 1, c = a + vn, d = c + 1;
-					tris[k++] = a; tris[k++] = c; tris[k++] = b;
-					tris[k++] = b; tris[k++] = c; tris[k++] = d;
+					// The kind of a cell is the kind most of its corners have (the first corner breaks a tie).
+					int kind = t.PaintAt(a);
+					int votes = 0;
+					foreach (int corner in new[] { a, b, c, d })
+					{
+						int count = 0;
+						foreach (int other in new[] { a, b, c, d })
+						{
+							if (t.PaintAt(other) == t.PaintAt(corner))
+							{
+								count++;
+							}
+						}
+						if (count > votes)
+						{
+							votes = count;
+							kind = t.PaintAt(corner);
+						}
+					}
+					if (perKind[kind] == null)
+					{
+						perKind[kind] = new List<int>();
+					}
+					perKind[kind].Add(a); perKind[kind].Add(c); perKind[kind].Add(b);
+					perKind[kind].Add(b); perKind[kind].Add(c); perKind[kind].Add(d);
 				}
 			}
-			var mesh = new Mesh { name = "Map_ground", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-			mesh.vertices = verts;
-			mesh.triangles = tris;
-			mesh.RecalculateNormals();
-			mesh.RecalculateBounds();
+			// Normals from the whole ground, so the seams between kinds are not visible.
+			var whole = new Mesh { indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+			whole.vertices = verts;
+			var all = new List<int>();
+			foreach (List<int> list in perKind)
+			{
+				if (list != null)
+				{
+					all.AddRange(list);
+				}
+			}
+			whole.triangles = all.ToArray();
+			whole.RecalculateNormals();
+			Vector3[] normals = whole.normals;
+			UnityEngine.Object.Destroy(whole);
 
 			terrain = new GameObject("ground") { layer = Layer };
 			terrain.transform.SetParent(Root.transform, false);
-			terrain.AddComponent<MeshFilter>().sharedMesh = mesh;
-			terrain.AddComponent<MeshRenderer>().sharedMaterial = MapMaterials.Make(Source, new Color(0.23f, 0.36f, 0.17f));
-			terrain.AddComponent<MeshCollider>().sharedMesh = mesh;
+			for (int kind = 0; kind < kinds; kind++)
+			{
+				if (perKind[kind] == null)
+				{
+					continue;
+				}
+				var mesh = new Mesh { name = "Map_ground_" + GroundTypes.Names[kind], indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+				mesh.vertices = verts;
+				mesh.triangles = perKind[kind].ToArray();
+				mesh.normals = normals;
+				mesh.RecalculateBounds();
+				var piece = new GameObject("ground_" + GroundTypes.Names[kind]) { layer = Layer };
+				piece.transform.SetParent(terrain.transform, false);
+				piece.AddComponent<MeshFilter>().sharedMesh = mesh;
+				piece.AddComponent<MeshRenderer>().sharedMaterial = MapMaterials.Make(Source, GroundTypes.ColorOf(kind));
+				piece.AddComponent<MeshCollider>().sharedMesh = mesh;
+				// Off the road, so the game counts it as off-track and it grips less; how much depends on what is painted there.
+				float grip, drag;
+				GroundTypes.HandlingOf(kind, out grip, out drag);
+				HandlingModifier handling = piece.AddComponent<HandlingModifier>();
+				handling.gripModifier = grip;
+				handling.resistanceModifier = drag;
+				handling.background = true;
+			}
 			if (Environment.GetEnvironmentVariable("HALFGRIPTOOLS_MAPSHOT") != null)
 			{
 				CarveCheck(verts, t);
 			}
-			// Off the road, so the game counts it as off-track and it grips less.
-			HandlingModifier handling = terrain.AddComponent<HandlingModifier>();
-			handling.gripModifier = 0.7f;
-			handling.resistanceModifier = 3f;
-			handling.background = true;
 		}
 
 		/// <summary>Test aid: how far above the road the ground mesh is, across the road's width, at every 4th sample. Logs the worst spots.</summary>
@@ -564,13 +615,37 @@ namespace HalfGripTools.MapBuild
 			props = new GameObject("props") { layer = Layer };
 			props.transform.SetParent(Root.transform, false);
 			var batches = new Dictionary<string, Batch>();
+			bool discovered = false;
 			foreach (MapProp p in Doc.Props)
 			{
+				if (Array.IndexOf(PropTypes.Names, p.Type) < 0)
+				{
+					// Not one of the built-in shapes: the game's own pieces and other mods' pieces are made as objects.
+					if (!discovered && p.Type.StartsWith("game."))
+					{
+						discovered = true;
+						MapPropCatalog.DiscoverGame();
+					}
+					GameObject made = MapPropCatalog.Spawn(p.Type, props.transform, p.Pos, p.Rot, p.Scale);
+					if (made != null)
+					{
+						SetLayerRecursively(made, Layer);
+					}
+					continue;
+				}
 				Stamp(batches, p);
 			}
 			foreach (Batch b in batches.Values)
 			{
 				Spawn(b, props.transform);
+			}
+		}
+
+		private static void SetLayerRecursively(GameObject go, int layer)
+		{
+			foreach (Transform t in go.GetComponentsInChildren<Transform>(true))
+			{
+				t.gameObject.layer = layer;
 			}
 		}
 

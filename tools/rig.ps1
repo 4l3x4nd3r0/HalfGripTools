@@ -10,6 +10,7 @@ param(
 	[string]$Name = "A",
 	[string]$Pattern = "",
 	[string]$Extra = "",
+	[string]$Config = "",
 	[string]$GameDir = "F:\SteamLibrary\steamapps\common\Half Grip Demo",
 	[string]$Work = (Join-Path $env:TEMP "halfgrip-rig")
 )
@@ -35,6 +36,10 @@ New-Item -ItemType Directory -Force $modsDir | Out-Null
 foreach ($m in $Mods) { robocopy $m (Join-Path $modsDir (Split-Path $m -Leaf)) /E /NFL /NDL /NJH /NJS /NP | Out-Null }
 if (Test-Path $data) { Remove-Item $data -Recurse -Force }
 New-Item -ItemType Directory -Force $data | Out-Null
+if ($Config -ne "") {
+	New-Item -ItemType Directory -Force "$data\config" | Out-Null
+	Set-Content "$data\config\HalfGripTools.cfg" $Config -Encoding utf8
+}
 
 $save = "$env:USERPROFILE\AppData\LocalLow\Half Games\HalfGrip"
 function Get-SaveHash {
