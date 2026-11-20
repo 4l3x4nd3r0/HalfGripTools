@@ -552,6 +552,9 @@ namespace HalfGripTools.MapBuild
 
 		// ---- props -------------------------------------------------------------------------------------------------------------
 
+		/// <summary>The object the props are built under (null before the first build).</summary>
+		internal Transform PropsRoot => props == null ? null : props.transform;
+
 		internal void RebuildProps()
 		{
 			if (props != null)

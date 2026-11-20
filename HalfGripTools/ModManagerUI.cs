@@ -154,11 +154,37 @@ namespace HalfGripTools
 			scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
 
 			// Footer.
-			Label("Hint", panel, "Changes are saved now and take effect the next time the game starts.", 32, Soft, TextAlignmentOptions.BottomLeft, new Vector2(48f, 36f), new Vector2(1000f, 60f), bottom: true);
+			Label("Hint", panel, "Changes are saved now, active next start.", 32, Soft, TextAlignmentOptions.BottomLeft, new Vector2(48f, 36f), new Vector2(600f, 60f), bottom: true);
+			if (MapMaker.Enabled)
+			{
+				BuildMapMakerButton(panel);
+			}
 			Button(panel, "QUIT GAME", new Vector2(-420f, 36f), new Vector2(300f, 84f), Grey, () => Application.Quit(), bottomRight: true);
 			Button(panel, "CLOSE", new Vector2(-48f, 36f), new Vector2(340f, 84f), Red, Close, bottomRight: true);
 
 			Refresh();
+		}
+
+		private TMP_Text makerLabel;
+
+		/// <summary>The MAP MAKER button. One click starts it like the playground, with no run behind it.</summary>
+		private void BuildMapMakerButton(RectTransform panel)
+		{
+			RectTransform rect = Button(panel, "MAP MAKER", new Vector2(-780f, 36f), new Vector2(340f, 84f), Amber, OnMapMaker, bottomRight: true);
+			makerLabel = rect.GetComponentInChildren<TMP_Text>();
+		}
+
+		private void OnMapMaker()
+		{
+			string problem = MapRegistry.StartMaker();
+			if (problem != null)
+			{
+				makerLabel.fontSize = 26f;
+				makerLabel.text = problem.Length > 60 ? problem.Substring(0, 57) + "..." : problem;
+				subtitle.text = problem;
+				return;
+			}
+			Close();
 		}
 
 		/// <summary>Rebuilds both lists from the current state.</summary>

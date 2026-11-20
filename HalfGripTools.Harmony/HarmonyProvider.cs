@@ -34,6 +34,7 @@ namespace HalfGripTools.HarmonyHost
 			Patch(typeof(LoadoutApplyPatch));
 			Patch(typeof(TrackIndexPatch));
 			Patch(typeof(RaceBeginPatch));
+			Patch(typeof(LanguageLoadedPatch));
 		}
 
 		public IModPatcher CreatePatcher(string ownerId)
@@ -128,6 +129,15 @@ namespace HalfGripTools.HarmonyHost
 		private static bool Prefix(ref int __result)
 		{
 			return !GameHooks.TrackIndex(ref __result);
+		}
+	}
+
+	[HarmonyPatch(typeof(Loc), "Load")]
+	internal static class LanguageLoadedPatch
+	{
+		private static void Postfix(string lang)
+		{
+			GameHooks.LanguageLoaded(lang);
 		}
 	}
 

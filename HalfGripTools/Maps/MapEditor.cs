@@ -20,6 +20,7 @@ namespace HalfGripTools
 		internal static void Attach(MapWorld world, MapDocument doc, TrackManager tm, MapInfo info, bool open)
 		{
 			Close();
+			MapMaker.Reloading = false;
 			GameObject go = new GameObject("HalfGripMapEditor");
 			current = go.AddComponent<EditorBehaviour>();
 			current.Init(world, doc, tm, info);
@@ -42,7 +43,7 @@ namespace HalfGripTools
 
 	internal sealed class EditorBehaviour : MonoBehaviour
 	{
-		private enum Tool { Track, Props, Terrain, Map }
+		private enum Tool { Track, Props, Terrain, Map, Start }
 
 		private MapWorld world;
 		private MapDocument doc;
@@ -76,6 +77,20 @@ namespace HalfGripTools
 		private string nameField = "";
 		private string saveAsField = "";
 		private bool armedNew;
+		private bool menuOpen;
+
+		// the start grid: the automatic one (shown until you change it) and what is selected
+		private List<MapSpot> autoSpots = new List<MapSpot>();
+		private MapSpot autoLights = new MapSpot();
+		private int selSpot = -1;
+		private bool selLights;
+
+		// undo: the file text of the map as it stood after the last change that had settled
+		private readonly List<string> undoStack = new List<string>();
+		private readonly List<string> redoStack = new List<string>();
+		private string stable = "";
+		private float nextSettle;
+		private const int MaxUndo = 60;
 
 		/// <summary>The name of the text box that has the keyboard, as the last OnGUI saw it ("" when none). While one has it, keys are typing, not flying.</summary>
 		private string focused = "";
@@ -84,7 +99,7 @@ namespace HalfGripTools
 		private GUIStyle small;
 		private Rect leftPanel, bottomPanel;
 
-		private static readonly string[] ToolNames = { "TRACK", "PROPS", "TERRAIN", "MAP" };
+		private static readonly string[] ToolNames = { "TRACK", "PROPS", "TERRAIN", "MAP", "START" };
 		private static readonly string[] BrushNames = { "RAISE", "LOWER", "SMOOTH", "FLATTEN" };
 
 		internal void Init(MapWorld w, MapDocument d, TrackManager t, MapInfo i)
@@ -94,6 +109,8 @@ namespace HalfGripTools
 			tm = t;
 			info = i;
 			nameField = d.Name;
+			stable = d.ToJson();
+			RefreshAuto();
 			saveAsField = d.Id == MapLibrary.MakerId ? "" : d.Name;
 			white = new Texture2D(1, 1) { hideFlags = HideFlags.HideAndDontSave };
 			white.SetPixel(0, 0, Color.white);
@@ -113,8 +130,16 @@ namespace HalfGripTools
 			GameInput.Mute(this, true);
 			savedLock = Cursor.lockState;
 			savedVisible = Cursor.visible;
-			Cursor.lockState = CursorLockMode.None;
-			Cursor.visible = true;
+			FreeCursor();
+			// The game's hand pointer (Grabber) keeps its own cursor in the middle of the screen and locks the real one: it sleeps while the editor is open.
+			foreach (Grabber grabber in FindObjectsByType<Grabber>(FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+			{
+				if (grabber.enabled)
+				{
+					grabber.enabled = false;
+					sleepingGrabbers.Add(grabber);
+				}
+			}
 
 			var go = new GameObject("MapEditorCamera");
 			cam = go.AddComponent<Camera>();
@@ -227,15 +252,51 @@ namespace HalfGripTools
 			GameInput.Mute(this, false);
 			Cursor.lockState = savedLock;
 			Cursor.visible = savedVisible;
+			foreach (Grabber grabber in sleepingGrabbers)
+			{
+				if (grabber != null)
+				{
+					grabber.enabled = true;
+				}
+			}
+			sleepingGrabbers.Clear();
 			if (cam != null)
 			{
 				Destroy(cam.gameObject);
 			}
 		}
 
+		private readonly List<Grabber> sleepingGrabbers = new List<Grabber>();
+
+		/// <summary>An ordinary mouse pointer, free to go anywhere on the screen like in a menu.</summary>
+		private static void FreeCursor()
+		{
+			if (Cursor.lockState != CursorLockMode.None)
+			{
+				Cursor.lockState = CursorLockMode.None;
+			}
+			if (!Cursor.visible)
+			{
+				Cursor.visible = true;
+			}
+		}
+
+		/// <summary>The race's own scripts lock the cursor when they wake up and when the pause closes: the editor takes it back every frame, after them.</summary>
+		private void LateUpdate()
+		{
+			if (open)
+			{
+				FreeCursor();
+			}
+		}
+
 		private void OnDestroy()
 		{
 			Shutdown();
+			if (!MapMaker.Reloading)
+			{
+				MapMaker.EndStandalone();
+			}
 			if (white != null)
 			{
 				Destroy(white);
@@ -251,8 +312,7 @@ namespace HalfGripTools
 		/// <summary>Loads the race scene again: the game lays out its start grid, AI and lap line on the map as it is now.</summary>
 		private void Reload()
 		{
-			Scene scene = SceneManager.GetActiveScene();
-			SceneManager.LoadScene(scene.buildIndex >= 0 ? scene.buildIndex : 0);
+			MapMaker.RestartRace();
 		}
 
 		// ---- every frame -------------------------------------------------------------------------------------------------------------
@@ -274,6 +334,16 @@ namespace HalfGripTools
 			{
 				return;
 			}
+			if (Input.GetKeyDown(KeyCode.Escape))
+			{
+				menuOpen = !menuOpen;
+				GUI.FocusControl("");
+			}
+			FreeCursor();
+			if (menuOpen)
+			{
+				return;
+			}
 			bool typing = focused == "nameField" || focused == "saveAsField";
 			Flying(typing);
 			if (typing)
@@ -292,15 +362,33 @@ namespace HalfGripTools
 			if (Input.GetKeyDown(KeyCode.Alpha2)) tool = Tool.Props;
 			if (Input.GetKeyDown(KeyCode.Alpha3)) tool = Tool.Terrain;
 			if (Input.GetKeyDown(KeyCode.Alpha4)) tool = Tool.Map;
+			if (Input.GetKeyDown(KeyCode.Alpha5)) tool = Tool.Start;
+			bool ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+			if (ctrl && Input.GetKeyDown(KeyCode.Z))
+			{
+				if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) Redo(); else Undo();
+			}
+			if (ctrl && Input.GetKeyDown(KeyCode.Y)) Redo();
 
 			bool overUi = IsOverUi() || GUIUtility.hotControl != 0;
+			// A click on a track point, a prop, a start spot or the lights picks it up whichever of those tools is showing.
+			if (!dragging && !overUi && Input.GetMouseButtonDown(0) && (tool == Tool.Track || tool == Tool.Props || tool == Tool.Start))
+			{
+				Tool wanted = ToolUnderMouse();
+				if (wanted != tool)
+				{
+					tool = wanted;
+				}
+			}
 			switch (tool)
 			{
 				case Tool.Track: TrackTool(overUi); break;
 				case Tool.Props: PropsTool(overUi); break;
 				case Tool.Terrain: TerrainTool(overUi); break;
+				case Tool.Start: StartTool(overUi); break;
 			}
 			Flush();
+			UndoTick();
 		}
 
 		private void Flying(bool typing)
@@ -348,14 +436,16 @@ namespace HalfGripTools
 		}
 
 		/// <summary>The world point under the mouse: the first piece of the map the ray meets, else the flat plane at the map's base height.</summary>
-		private bool Pick(out Vector3 worldPoint)
+		private bool Pick(out Vector3 worldPoint, bool ignoreProps = false)
 		{
+			Transform propsRoot = ignoreProps ? world.PropsRoot : null;
 			Ray ray = cam.ScreenPointToRay(Input.mousePosition);
 			RaycastHit[] hits = Physics.RaycastAll(ray, 9000f, ~0, QueryTriggerInteraction.Ignore);
 			Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 			foreach (RaycastHit hit in hits)
 			{
-				if (hit.collider != null && hit.collider.transform.IsChildOf(world.Root.transform) && hit.collider.name != "void floor")
+				if (hit.collider != null && hit.collider.transform.IsChildOf(world.Root.transform) && hit.collider.name != "void floor"
+					&& (propsRoot == null || !hit.collider.transform.IsChildOf(propsRoot)))
 				{
 					worldPoint = hit.point;
 					return true;
@@ -540,6 +630,256 @@ namespace HalfGripTools
 			rebuildAt = 0f;
 		}
 
+		// ---- the start tool: the grid and the lights ---------------------------------------------------------------------------------
+
+		private List<MapSpot> ShownSpots { get { return doc.Spots.Count > 0 ? doc.Spots : autoSpots; } }
+
+		private MapSpot ShownLights { get { return doc.HasLights ? new MapSpot { X = doc.LightX, Z = doc.LightZ } : autoLights; } }
+
+		private Vector3 SpotWorld(MapSpot spot)
+		{
+			return world.W(new Vector3(spot.X, doc.Track[0].Y, spot.Z));
+		}
+
+		private void RefreshAuto()
+		{
+			try
+			{
+				MapSpot lights;
+				autoSpots = MapRace.AutoGrid(world, out lights);
+				autoLights = lights;
+			}
+			catch (Exception e)
+			{
+				ModRuntime.Log.LogWarning("Map Maker: could not work out the automatic grid: " + e.Message);
+			}
+		}
+
+		/// <summary>Starts a custom grid from the automatic one, so a spot can be moved, added or removed.</summary>
+		private void EnsureSpots()
+		{
+			if (doc.Spots.Count == 0)
+			{
+				foreach (MapSpot s in autoSpots)
+				{
+					doc.Spots.Add(new MapSpot { X = s.X, Z = s.Z });
+				}
+			}
+		}
+
+		private Vector2 MouseGui()
+		{
+			return new Vector2(Input.mousePosition.x / UiScale(), (Screen.height - Input.mousePosition.y) / UiScale());
+		}
+
+		private float DistTo(Vector3 worldPoint)
+		{
+			Vector2 g;
+			return ToScreen(worldPoint, out g) ? Vector2.Distance(g, MouseGui()) : float.MaxValue;
+		}
+
+		private int NearestSpot(float within)
+		{
+			int best = -1;
+			float bestD = within;
+			List<MapSpot> spots = ShownSpots;
+			for (int i = 0; i < spots.Count; i++)
+			{
+				float d = DistTo(SpotWorld(spots[i]));
+				if (d < bestD)
+				{
+					bestD = d;
+					best = i;
+				}
+			}
+			return best;
+		}
+
+		private bool OverLights(float within)
+		{
+			return DistTo(SpotWorld(ShownLights) + Vector3.up * 2f) < within;
+		}
+
+		/// <summary>Which tool the thing under the mouse belongs to (the current one when nothing is there).</summary>
+		private Tool ToolUnderMouse()
+		{
+			float point = float.MaxValue, prop = float.MaxValue, spot = float.MaxValue;
+			int p = NearestPoint(16f);
+			if (p >= 0) point = DistTo(world.W(doc.Track[p].Pos));
+			int q = NearestProp(16f);
+			if (q >= 0) prop = DistTo(world.W(doc.Props[q].Pos + Vector3.up * 3f));
+			int sp = NearestSpot(18f);
+			if (sp >= 0) spot = DistTo(SpotWorld(ShownSpots[sp]));
+			if (OverLights(18f)) spot = Mathf.Min(spot, 1f);
+			float best = Mathf.Min(point, Mathf.Min(prop, spot));
+			if (best == float.MaxValue)
+			{
+				return tool;
+			}
+			return best == spot ? Tool.Start : (best == point ? Tool.Track : Tool.Props);
+		}
+
+		private void StartTool(bool overUi)
+		{
+			if (dragging)
+			{
+				if (!Input.GetMouseButton(0) || (!selLights && selSpot < 0))
+				{
+					dragging = false;
+					return;
+				}
+				Vector3 at;
+				if (Pick(out at, true))
+				{
+					Vector3 d = world.D(at);
+					if (selLights)
+					{
+						doc.HasLights = true;
+						doc.LightX = Clamp(d.x);
+						doc.LightZ = Clamp(d.z);
+					}
+					else
+					{
+						EnsureSpots();
+						doc.Spots[selSpot].X = Clamp(d.x);
+						doc.Spots[selSpot].Z = Clamp(d.z);
+					}
+				}
+				return;
+			}
+			if (!selLights && selSpot > 0 && (Input.GetKeyDown(KeyCode.Delete) || Input.GetKeyDown(KeyCode.Backspace)))
+			{
+				DeleteSpot();
+			}
+			if (!Input.GetMouseButtonDown(0) || overUi)
+			{
+				return;
+			}
+			if (OverLights(18f))
+			{
+				selLights = true;
+				selSpot = -1;
+				dragging = true;
+				return;
+			}
+			int hit = NearestSpot(18f);
+			if (hit >= 0)
+			{
+				selLights = false;
+				selSpot = hit;
+				dragging = true;
+				return;
+			}
+			Vector3 ground;
+			if (!Pick(out ground, true))
+			{
+				return;
+			}
+			if (ShownSpots.Count >= MapDocument.MaxSpots)
+			{
+				Say("The grid already has the most places it can (" + MapDocument.MaxSpots + ").");
+				return;
+			}
+			EnsureSpots();
+			Vector3 pos = world.D(ground);
+			doc.Spots.Add(new MapSpot { X = Clamp(pos.x), Z = Clamp(pos.z) });
+			selSpot = doc.Spots.Count - 1;
+			selLights = false;
+			dragging = true;
+		}
+
+		private void DeleteSpot()
+		{
+			if (selSpot <= 0)
+			{
+				Say("The player's place (P) stays; pick a numbered one to delete.");
+				return;
+			}
+			EnsureSpots();
+			if (selSpot < doc.Spots.Count)
+			{
+				doc.Spots.RemoveAt(selSpot);
+			}
+			selSpot = -1;
+		}
+
+		// ---- undo and redo -----------------------------------------------------------------------------------------------------------
+
+		/// <summary>
+		/// Once the mouse is up and the map has stopped changing, a change that happened since the last check becomes one undo step. A whole drag,
+		/// brush stroke or slider move is one step, whatever made it.
+		/// </summary>
+		private void UndoTick(bool force = false)
+		{
+			if (!force && (Time.unscaledTime < nextSettle || Input.GetMouseButton(0) || dragging || painting || GUIUtility.hotControl != 0))
+			{
+				return;
+			}
+			nextSettle = Time.unscaledTime + 0.25f;
+			string now = doc.ToJson();
+			if (now == stable)
+			{
+				return;
+			}
+			undoStack.Add(stable);
+			if (undoStack.Count > MaxUndo)
+			{
+				undoStack.RemoveAt(0);
+			}
+			redoStack.Clear();
+			stable = now;
+		}
+
+		private void Undo()
+		{
+			UndoTick(true);
+			if (undoStack.Count == 0)
+			{
+				Say("Nothing to undo.");
+				return;
+			}
+			redoStack.Add(stable);
+			string back = undoStack[undoStack.Count - 1];
+			undoStack.RemoveAt(undoStack.Count - 1);
+			Restore(back);
+			Say("Undone (" + undoStack.Count + " more steps back). Ctrl+Y goes forward again.");
+		}
+
+		private void Redo()
+		{
+			UndoTick(true);
+			if (redoStack.Count == 0)
+			{
+				Say("Nothing to redo.");
+				return;
+			}
+			undoStack.Add(stable);
+			string next = redoStack[redoStack.Count - 1];
+			redoStack.RemoveAt(redoStack.Count - 1);
+			Restore(next);
+			Say("Redone (" + redoStack.Count + " more steps forward).");
+		}
+
+		private void Restore(string json)
+		{
+			try
+			{
+				doc.CopyFrom(MapDocument.Parse(json));
+				stable = json;
+				selPoint = Mathf.Min(selPoint, doc.Track.Count - 1);
+				selProp = Mathf.Min(selProp, doc.Props.Count - 1);
+				selSpot = Mathf.Min(selSpot, ShownSpots.Count - 1);
+				dragging = false;
+				dirtyTrack = dirtyTerrain = dirtyProps = true;
+				rebuildAt = 0f;
+				nextSettle = Time.unscaledTime + 0.25f;
+			}
+			catch (Exception e)
+			{
+				Say("Could not go back: " + e.Message);
+			}
+		}
+
 		// ---- the props tool --------------------------------------------------------------------------------------------------------
 
 		private int NearestProp(float within)
@@ -572,7 +912,7 @@ namespace HalfGripTools
 				else
 				{
 					Vector3 at;
-					if (Pick(out at))
+					if (Pick(out at, true))
 					{
 						Vector3 d = world.D(at);
 						MapProp p = doc.Props[selProp];
@@ -713,6 +1053,7 @@ namespace HalfGripTools
 				if (dirtyTrack)
 				{
 					world.RebuildTrack();
+						RefreshAuto();
 				}
 				else if (dirtyTerrain)
 				{
@@ -839,6 +1180,12 @@ namespace HalfGripTools
 				focused = GUI.GetNameOfFocusedControl();
 			}
 			DrawGizmos();
+			if (menuOpen)
+			{
+				leftPanel = bottomPanel = Rect.zero;
+				DrawMenu(Screen.width / k, Screen.height / k);
+				return;
+			}
 
 			leftPanel = new Rect(10, 10, 270, Mathf.Min(Screen.height / k - 20f, 560f));
 			GUI.color = new Color(0f, 0f, 0f, 0.72f);
@@ -846,13 +1193,18 @@ namespace HalfGripTools
 			GUI.color = Color.white;
 			GUILayout.BeginArea(new Rect(leftPanel.x + 8, leftPanel.y + 6, leftPanel.width - 16, leftPanel.height - 12));
 			GUILayout.Label("<b>MAP MAKER</b>  " + doc.Name, small);
-			tool = (Tool)GUILayout.Toolbar((int)tool, ToolNames);
-			GUILayout.Space(6);
+			tool = (Tool)GUILayout.SelectionGrid((int)tool, ToolNames, 3);
+			GUILayout.BeginHorizontal();
+			if (GUILayout.Button("UNDO (Ctrl+Z)")) { Undo(); }
+			if (GUILayout.Button("REDO (Ctrl+Y)")) { Redo(); }
+			GUILayout.EndHorizontal();
+			GUILayout.Space(4);
 			switch (tool)
 			{
 				case Tool.Track: TrackPanel(); break;
 				case Tool.Props: PropsPanel(); break;
 				case Tool.Terrain: TerrainPanel(); break;
+				case Tool.Start: StartPanel(); break;
 				default: MapPanel(); break;
 			}
 			GUILayout.EndArea();
@@ -862,12 +1214,105 @@ namespace HalfGripTools
 			GUI.color = new Color(0f, 0f, 0f, 0.6f);
 			GUI.DrawTexture(bottomPanel, white);
 			GUI.color = Color.white;
-			string help = Time.unscaledTime < statusUntil ? status : "1-4 tools   T top view   Right mouse: look   WASD/QE fly   Scroll: speed";
+			string help = Time.unscaledTime < statusUntil ? status : "Esc menu   1-4 tools   T top view   Right mouse: look   WASD/QE fly   Scroll: speed";
 			GUI.Label(new Rect(bottomPanel.x + 6, bottomPanel.y + 2, bottomPanel.width - 12, 20), help, small);
+		}
+
+		/// <summary>The Esc menu: the way out of the editor.</summary>
+		private void DrawMenu(float width, float height)
+		{
+			GUI.color = new Color(0f, 0f, 0f, 0.6f);
+			GUI.DrawTexture(new Rect(0, 0, width, height), white);
+			GUI.color = Color.white;
+			Rect box = new Rect(width * 0.5f - 160f, height * 0.5f - 170f, 320f, 340f);
+			GUI.color = new Color(0.08f, 0.08f, 0.1f, 0.96f);
+			GUI.DrawTexture(box, white);
+			GUI.color = Color.white;
+			GUILayout.BeginArea(new Rect(box.x + 16, box.y + 12, box.width - 32, box.height - 24));
+			GUILayout.Label("<b>MAP MAKER</b>  " + doc.Name, small);
+			GUILayout.Space(6);
+			if (GUILayout.Button("RESUME", GUILayout.Height(34))) { menuOpen = false; }
+			GUILayout.BeginHorizontal();
+			if (GUILayout.Button("UNDO", GUILayout.Height(30))) { Undo(); }
+			if (GUILayout.Button("REDO", GUILayout.Height(30))) { Redo(); }
+			GUILayout.EndHorizontal();
+			if (GUILayout.Button("SAVE", GUILayout.Height(34))) { DoSave(); menuOpen = false; }
+			if (GUILayout.Button("TEST DRIVE", GUILayout.Height(34))) { DoTest(); }
+			if (GUILayout.Button(MapMaker.Standalone ? "SAVE AND QUIT EDITOR" : "SAVE AND LEAVE EDITOR", GUILayout.Height(34)))
+			{
+				try
+				{
+					Save();
+					QuitEditor();
+				}
+				catch (Exception e)
+				{
+					Say("Could not save: " + e.Message);
+					menuOpen = false;
+				}
+			}
+			if (GUILayout.Button(MapMaker.Standalone ? "QUIT EDITOR WITHOUT SAVING" : "LEAVE EDITOR WITHOUT SAVING", GUILayout.Height(34))) { QuitEditor(); }
+			GUILayout.EndArea();
+		}
+
+		/// <summary>Out of the editor. Started from the menu: back to the main menu, nothing of a run touched. Opened with F10 in a race: the race goes on without the editor.</summary>
+		private void QuitEditor()
+		{
+			if (!MapMaker.Standalone)
+			{
+				MapMaker.OpenNext = false;
+				MapMaker.Testing = true;
+				Reload();
+				return;
+			}
+			string to = MapMaker.LeaveScene;
+			MapMaker.Reloading = false;
+			Shutdown();
+			MapMaker.EndStandalone();
+			TimeScale.ResetAll();
+			Cursor.lockState = CursorLockMode.Confined;
+			Cursor.visible = true;
+			if (string.IsNullOrEmpty(to) || SceneLoader.Instance == null)
+			{
+				Reload();
+				return;
+			}
+			SceneLoader.Instance.LoadScene(to);
+		}
+
+		private void DrawGrid()
+		{
+			List<MapSpot> spots = ShownSpots;
+			for (int i = 0; i < spots.Count; i++)
+			{
+				Vector2 g;
+				if (!ToScreen(SpotWorld(spots[i]), out g))
+				{
+					continue;
+				}
+				bool sel = !selLights && i == selSpot && tool == Tool.Start;
+				Color c = i == 0 ? new Color(0.25f, 0.95f, 0.4f) : new Color(1f, 0.55f, 0.15f);
+				Dot(g, sel ? 16f : 12f, sel ? new Color(1f, 0.9f, 0.2f) : c);
+				GUI.color = Color.white;
+				GUI.Label(new Rect(g.x + 9, g.y - 10, 60, 20), i == 0 ? "P" : i.ToString(), small);
+			}
+			Vector2 l;
+			if (ToScreen(SpotWorld(ShownLights) + Vector3.up * 2f, out l))
+			{
+				bool sel = selLights && tool == Tool.Start;
+				Dot(l, sel ? 16f : 12f, sel ? new Color(1f, 0.9f, 0.2f) : new Color(0.95f, 0.2f, 0.2f));
+				GUI.color = Color.white;
+				GUI.Label(new Rect(l.x + 9, l.y - 10, 80, 20), "LIGHTS", small);
+			}
+			GUI.color = Color.white;
 		}
 
 		private void DrawGizmos()
 		{
+			if (tool != Tool.Terrain && tool != Tool.Map)
+			{
+				DrawGrid();
+			}
 			List<Sample> d = world.Dense;
 			for (int i = 0; i < d.Count; i += 2)
 			{
@@ -892,14 +1337,14 @@ namespace HalfGripTools
 					GUI.Label(new Rect(g.x + 9, g.y - 10, 90, 20), "START", small);
 				}
 			}
-			if (tool == Tool.Props)
+			if (tool == Tool.Props || tool == Tool.Track)
 			{
 				for (int i = 0; i < doc.Props.Count; i++)
 				{
 					Vector2 g;
 					if (ToScreen(world.W(doc.Props[i].Pos + Vector3.up * 3f), out g))
 					{
-						Dot(g, i == selProp ? 10f : 6f, i == selProp ? new Color(1f, 0.85f, 0.1f) : new Color(0.4f, 0.9f, 1f, 0.9f));
+						Dot(g, i == selProp && tool == Tool.Props ? 10f : 6f, i == selProp && tool == Tool.Props ? new Color(1f, 0.85f, 0.1f) : new Color(0.4f, 0.9f, 1f, 0.9f));
 					}
 				}
 			}
@@ -1005,6 +1450,16 @@ namespace HalfGripTools
 					rebuildAt = 0f;
 				}
 			}
+		}
+
+		private void StartPanel()
+		{
+			GUILayout.Label("The start grid and the lights. Drag a place or the lights to move them. Click empty ground to add a place (one more AI car each, up to " + MapDocument.MaxSpots + "). Delete removes the selected one. Cars face along the start line.", small);
+			GUILayout.Label((doc.Spots.Count > 0 ? "Your grid: " : "Automatic grid: ") + ShownSpots.Count + " places (P is yours)." + (doc.HasLights ? "  Lights moved." : ""), small);
+			if (!selLights && selSpot > 0 && GUILayout.Button("Delete place " + selSpot)) { DeleteSpot(); }
+			if (GUILayout.Button("Automatic grid again")) { doc.Spots.Clear(); selSpot = -1; }
+			if (GUILayout.Button("Lights back behind the line")) { doc.HasLights = false; selLights = false; }
+			GUILayout.Label("Test drive to see the cars on their places.", small);
 		}
 
 		private void TerrainPanel()

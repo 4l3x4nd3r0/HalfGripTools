@@ -321,6 +321,77 @@ namespace HalfGripTools
 			return true;
 		}
 
+		/// <summary>
+		/// The MAP MAKER button. It does what the game's playground does: puts on the loadout you last saved, sets the race context by hand and loads the
+		/// race scene, with no run behind it, so nothing costs a life and the run you have is left as it was. Returns a sentence for the player when it cannot.
+		/// </summary>
+		internal static string StartMaker()
+		{
+			if (!MapMaker.Enabled)
+			{
+				return "The Map Maker is off: set Enabled = true under [MapMaker] in HalfGripTools.cfg.";
+			}
+			MapInfo maker = infos.FirstOrDefault(i => i.Id == MapLibrary.MakerId);
+			if (maker == null || maker.Definition == null || SceneLoader.Instance == null)
+			{
+				return "The Map Maker map is not ready: open the main menu and try again.";
+			}
+			try
+			{
+				ApplySavedLoadout();
+				RunState.ClearRaceContext();
+				SetRunState("ActiveMap", maker.Definition);
+				SetRunState("ActiveWeather", maker.Definition.weather);
+				SetRunState("ActiveMapMusic", maker.Definition.PickMusic());
+				MapMaker.Standalone = true;
+				MapMaker.Reloading = false;
+				MapMaker.Testing = false;
+				MapMaker.OpenNext = true;
+				TrackManager.ignoreFinish = true;
+				TrackManager.endRaceInstead = MapMaker.RestartRace;
+				MapMaker.LeaveScene = SceneManager.GetActiveScene().name;
+				PauseController.leaveTo = MapMaker.LeaveScene;
+				PauseController.quitJustLeaves = true;
+				SceneLoader.Instance.LoadTrackScene(hostTrack, 1f);
+				return null;
+			}
+			catch (Exception e)
+			{
+				MapMaker.EndStandalone();
+				ModRuntime.Log.LogError("Map Maker button: " + e);
+				return "Could not start the editor: " + e.Message;
+			}
+		}
+
+		/// <summary>RunState's map, weather and music have private setters; the playground needs them without a run.</summary>
+		private static void SetRunState(string name, object value)
+		{
+			System.Reflection.MethodInfo set = typeof(RunState).GetProperty(name)?.GetSetMethod(true);
+			if (set == null)
+			{
+				throw new InvalidOperationException("RunState." + name + " has no setter (the game changed?)");
+			}
+			set.Invoke(null, new[] { value });
+		}
+
+		/// <summary>The car the player last saved in the garage (what <c>DevCommands.OpenPlayground</c> uses), put on for the race.</summary>
+		private static void ApplySavedLoadout()
+		{
+			System.Reflection.MethodInfo saved = typeof(PlayerStats).Assembly.GetType("DevCommands")?.GetMethod("SavedLoadout", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+			if (saved == null)
+			{
+				ModRuntime.Log.LogWarning("Map Maker: DevCommands.SavedLoadout was not found, the car will be the default one.");
+				return;
+			}
+			var equipped = (Dictionary<string, UpgradeComponent>)saved.Invoke(null, null);
+			PlayerStats.ResetAllUpgrades();
+			foreach (UpgradeComponent upgrade in equipped.Values)
+			{
+				upgrade.Apply();
+			}
+			PlayerLoadout.Set(equipped.Values);
+		}
+
 		/// <summary>RunState.BeginRace: when the Map Maker is set to open on every race, the race becomes the scratch map.</summary>
 		internal static void RaceBeginning()
 		{
@@ -367,6 +438,7 @@ namespace HalfGripTools
 			catch (Exception e)
 			{
 				ModRuntime.Log.LogError("Map " + info.DisplayName + " could not be built: " + e);
+				MapMaker.EndStandalone();
 			}
 		}
 

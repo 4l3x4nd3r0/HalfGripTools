@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using UnityEngine;
 
 namespace HalfGripTools.MapBuild
@@ -63,6 +64,12 @@ namespace HalfGripTools.MapBuild
 		{
 			return (MapPoint)MemberwiseClone();
 		}
+	}
+
+	/// <summary>A place on the start grid, on the ground (x, z in the map's own space). Cars face along the start line.</summary>
+	internal sealed class MapSpot
+	{
+		internal float X, Z;
 	}
 
 	internal sealed class MapProp
@@ -148,6 +155,15 @@ namespace HalfGripTools.MapBuild
 		internal readonly List<MapPoint> Track = new List<MapPoint>();
 		internal readonly List<MapProp> Props = new List<MapProp>();
 		internal MapTerrain Terrain = new MapTerrain();
+
+		/// <summary>The start grid: spot 0 is the player's, the rest are one AI car each. Empty = the automatic grid behind the start line.</summary>
+		internal readonly List<MapSpot> Spots = new List<MapSpot>();
+
+		/// <summary>Where the start lights stand (only when <see cref="HasLights"/>; else they are put just behind the start line).</summary>
+		internal bool HasLights;
+		internal float LightX, LightZ;
+
+		internal const int MaxSpots = 12;
 
 		/// <summary>Where the file came from, so Save writes it back there. Not part of the file.</summary>
 		internal string Path = "";
@@ -269,6 +285,26 @@ namespace HalfGripTools.MapBuild
 				});
 			}
 
+			Dictionary<string, object> grid = root.ContainsKey("grid") ? root["grid"] as Dictionary<string, object> : null;
+			if (grid != null)
+			{
+				foreach (object item in MiniJson.List(grid, "spots"))
+				{
+					Dictionary<string, object> o = item as Dictionary<string, object>;
+					if (o != null && doc.Spots.Count < MaxSpots)
+					{
+						doc.Spots.Add(new MapSpot { X = Coord(MiniJson.Number(o, "x")), Z = Coord(MiniJson.Number(o, "z")) });
+					}
+				}
+				Dictionary<string, object> lights = grid.ContainsKey("lights") ? grid["lights"] as Dictionary<string, object> : null;
+				if (lights != null)
+				{
+					doc.HasLights = true;
+					doc.LightX = Coord(MiniJson.Number(lights, "x"));
+					doc.LightZ = Coord(MiniJson.Number(lights, "z"));
+				}
+			}
+
 			Dictionary<string, object> t = root.ContainsKey("terrain") ? root["terrain"] as Dictionary<string, object> : null;
 			if (t != null)
 			{
@@ -370,6 +406,19 @@ namespace HalfGripTools.MapBuild
 				});
 			}
 			root["props"] = props;
+			if (Spots.Count > 0 || HasLights)
+			{
+				Dictionary<string, object> grid = new Dictionary<string, object>();
+				if (Spots.Count > 0)
+				{
+					grid["spots"] = Spots.Select(s => (object)new Dictionary<string, object> { { "x", Round(s.X) }, { "z", Round(s.Z) } }).ToList();
+				}
+				if (HasLights)
+				{
+					grid["lights"] = new Dictionary<string, object> { { "x", Round(LightX) }, { "z", Round(LightZ) } };
+				}
+				root["grid"] = grid;
+			}
 			Terrain.Ensure();
 			root["terrain"] = new Dictionary<string, object>
 			{
@@ -393,6 +442,24 @@ namespace HalfGripTools.MapBuild
 				bytes[i * 2 + 1] = (byte)((s >> 8) & 0xff);
 			}
 			return Convert.ToBase64String(bytes);
+		}
+
+		/// <summary>Takes everything but the id, name and file from another map (undo and redo put a saved state back into the map the editor holds).</summary>
+		internal void CopyFrom(MapDocument other)
+		{
+			Weather = other.Weather;
+			Icon = other.Icon;
+			Music = other.Music;
+			Track.Clear();
+			Track.AddRange(other.Track);
+			Props.Clear();
+			Props.AddRange(other.Props);
+			Spots.Clear();
+			Spots.AddRange(other.Spots);
+			HasLights = other.HasLights;
+			LightX = other.LightX;
+			LightZ = other.LightZ;
+			Terrain = other.Terrain;
 		}
 
 		internal MapDocument Clone()

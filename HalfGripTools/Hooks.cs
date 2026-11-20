@@ -65,6 +65,19 @@ namespace HalfGripTools
 			}
 		}
 
+		/// <summary>Call at the end of <c>Loc.Load(string lang)</c> (private): the game has just built its text table for that language, and the mods add their own rows.</summary>
+		public static void LanguageLoaded(string language)
+		{
+			if (!ModLoader.Running)
+			{
+				return;
+			}
+			foreach (ModContext mod in ModLoader.Mods)
+			{
+				mod.Text.Merge(language);
+			}
+		}
+
 		/// <summary>Call after the <c>Speedrun.Mode</c> setter ran.</summary>
 		public static void SpeedrunModeChanged()
 		{

@@ -21,6 +21,42 @@ namespace HalfGripTools
 
 		internal static KeyCode Key = KeyCode.F10;
 
+		/// <summary>
+		/// Set by the MAP MAKER button in the mod manager: the editor runs like the game's playground, with no run behind it (nothing is won or lost,
+		/// finishing does not end the race, the pause menu just leaves). Cleared when the editor goes away without reloading the race.
+		/// </summary>
+		internal static bool Standalone;
+
+		/// <summary>The scene the standalone editor was started from (the main menu): QUIT EDITOR goes back there.</summary>
+		internal static string LeaveScene = "";
+
+		/// <summary>Set when the editor reloads the race itself (test drive, F10), so the playground settings survive the reload.</summary>
+		internal static bool Reloading;
+
+		/// <summary>Starts the race over on the same scene (the standalone editor's way to "end" a race).</summary>
+		internal static void RestartRace()
+		{
+			Reloading = true;
+			UnityEngine.SceneManagement.Scene scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+			UnityEngine.SceneManagement.SceneManager.LoadScene(scene.buildIndex >= 0 ? scene.buildIndex : 0);
+		}
+
+		/// <summary>Puts the game's race switches back as a normal run expects them.</summary>
+		internal static void EndStandalone()
+		{
+			if (!Standalone)
+			{
+				return;
+			}
+			Standalone = false;
+			Reloading = false;
+			TrackManager.ignoreFinish = false;
+			TrackManager.endRaceInstead = null;
+			PauseController.leaveTo = null;
+			PauseController.quitJustLeaves = false;
+			RunState.ClearRaceContext();
+		}
+
 		/// <summary>Set when the editor sends you into a test drive, so the reloaded race does not open the editor again.</summary>
 		internal static bool Testing;
 

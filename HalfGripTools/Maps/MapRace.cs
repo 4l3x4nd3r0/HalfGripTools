@@ -209,22 +209,35 @@ namespace HalfGripTools
 			CarControllerNew car = tm.playerCarController;
 			float lift = playerSlot != null ? car.transform.position.y - playerSlot.position.y : 0.5f;
 
-			int n = 0;
-			foreach (Transform slot in container.Cast<Transform>().ToList())
+			MapDocument doc = world.Doc;
+			bool custom = doc.Spots.Count > 0;
+			var others = container.Cast<Transform>().Where(t => t != playerSlot).ToList();
+			if (custom)
 			{
-				if (slot == playerSlot)
+				// One AI car comes out of each place that is switched on, so more places are made by copying one.
+				while (others.Count < doc.Spots.Count - 1 && others.Count > 0)
 				{
-					continue;
+					GameObject copy = UnityEngine.Object.Instantiate(others[0].gameObject, container);
+					copy.name = others[0].name;
+					others.Add(copy.transform);
 				}
-				if (n >= 5)
+			}
+			int n = 0;
+			foreach (Transform slot in others)
+			{
+				if (n >= (custom ? doc.Spots.Count - 1 : 5))
 				{
 					slot.gameObject.SetActive(false);
 					continue;
 				}
-				slot.position = SlotAt(world, 26f * (n + 1), n % 2 == 0 ? -1 : 1);
+				if (custom)
+				{
+					slot.gameObject.SetActive(true);
+				}
+				slot.position = custom ? SpotAt(world, doc.Spots[n + 1]) : SlotAt(world, 26f * (n + 1), n % 2 == 0 ? -1 : 1);
 				n++;
 			}
-			Vector3 playerAt = SlotAt(world, 26f * 6f, -1);
+			Vector3 playerAt = custom ? SpotAt(world, doc.Spots[0]) : SlotAt(world, 26f * 6f, -1);
 			if (playerSlot != null)
 			{
 				playerSlot.position = playerAt;
@@ -254,9 +267,32 @@ namespace HalfGripTools
 			Transform semaphore = env.transform.Find("RaceStarterSemaphore");
 			if (semaphore != null)
 			{
-				Vector3 at = SlotAt(world, 22f, 0);
+				Vector3 at = doc.HasLights ? SpotAt(world, new MapSpot { X = doc.LightX, Z = doc.LightZ }) : SlotAt(world, 22f, 0);
 				semaphore.position = new Vector3(at.x, semaphore.position.y, at.z);
 			}
+		}
+
+		private static Vector3 SpotAt(MapWorld world, MapSpot spot)
+		{
+			Vector3 w = world.W(new Vector3(spot.X, 0f, spot.Z));
+			return new Vector3(w.x, 0f, w.z);
+		}
+
+		/// <summary>The automatic grid in the map's own space, for the editor to show and to start a custom one from: the player's place first, then the AI cars'. Also where the lights go.</summary>
+		internal static List<MapSpot> AutoGrid(MapWorld world, out MapSpot lights)
+		{
+			var spots = new List<MapSpot>();
+			Sample player = Behind(world, 26f * 6f);
+			spots.Add(new MapSpot { X = (player.Pos - player.Right * player.Half * 0.42f).x, Z = (player.Pos - player.Right * player.Half * 0.42f).z });
+			for (int n = 0; n < 5; n++)
+			{
+				Sample s = Behind(world, 26f * (n + 1));
+				Vector3 p = s.Pos + s.Right * ((n % 2 == 0 ? -1 : 1) * s.Half * 0.42f);
+				spots.Add(new MapSpot { X = p.x, Z = p.z });
+			}
+			Sample l = Behind(world, 22f);
+			lights = new MapSpot { X = l.Pos.x, Z = l.Pos.z };
+			return spots;
 		}
 
 		/// <summary>A place behind the start line: <paramref name="side"/> -1 and 1 are the two columns, 0 the middle. In the world, on the road (the start line is at height 0).</summary>

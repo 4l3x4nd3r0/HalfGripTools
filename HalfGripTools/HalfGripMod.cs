@@ -71,6 +71,9 @@ namespace HalfGripTools
 		/// <summary>Loads wav files from the mod's folder as clips (2.0).</summary>
 		public ModAudio Audio { get; }
 
+		/// <summary>Translations from <c>lang\&lt;language&gt;.csv</c> in the mod folder, merged into the game's own text table (2.0).</summary>
+		public ModText Text { get; }
+
 		/// <summary>Things that happen in the game (a race started, a lap done, a kill, a wreck, a shot) as C# events, so a simple mod needs no patch (2.0).</summary>
 		public ModEvents Events { get; }
 
@@ -92,6 +95,7 @@ namespace HalfGripTools
 			Events = new ModEvents(this);
 			Events.Join();
 			Audio = new ModAudio(this);
+			Text = new ModText(this);
 		}
 
 		/// <summary>

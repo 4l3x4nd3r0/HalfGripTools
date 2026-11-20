@@ -346,6 +346,7 @@ namespace HalfGripTools
 			{
 				instances.Add(mod);
 				mod.Load(ctx);
+				ctx.Text.MergeCurrent();
 				ctx.Config.SaveIfDirty();
 			}
 			entry.Status = ModStatus.Loaded;
