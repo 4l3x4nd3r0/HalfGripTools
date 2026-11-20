@@ -1,0 +1,9 @@
+{
+  "id": "restrictedfile",
+  "name": "Restricted File (refused)",
+  "version": "1.0.0",
+  "author": "4l3x4nd3r",
+  "description": "Example of what a restricted mod may not do: it opens a file with System.IO, so HalfGripTools refuses it and says where.",
+  "apiVersion": "2.0.0",
+  "trust": "restricted"
+}

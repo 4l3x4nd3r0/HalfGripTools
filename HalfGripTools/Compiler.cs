@@ -20,6 +20,8 @@ namespace HalfGripTools
 	{
 		private static List<MetadataReference> references;
 
+		private static List<MetadataReference> restrictedReferences;
+
 		private static string gameHash;
 
 		/// <summary>Returns the compiled mod, or null (with the errors logged) if it does not compile.</summary>
@@ -52,11 +54,14 @@ namespace HalfGripTools
 			{
 				trees.Add(CSharpSyntaxTree.ParseText(File.ReadAllText(file, Encoding.UTF8), parse, file));
 			}
+			// "trust": "restricted": no reference to the game's own assembly, Harmony or Steamworks, no unsafe code, and a second pass over
+			// everything the source names (RestrictedCheck) against the allow list. See docs\WRITING_MODS.md, "Restricted mods".
+			bool restricted = manifest.trust == "restricted";
 			CSharpCompilation compilation = CSharpCompilation.Create(
 				"HalfGripMod." + manifest.id,
 				trees,
-				References(log),
-				new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, optimizationLevel: OptimizationLevel.Release, allowUnsafe: true));
+				restricted ? RestrictedReferences(log) : References(log),
+				new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, optimizationLevel: OptimizationLevel.Release, allowUnsafe: !restricted));
 
 			using (MemoryStream dll = new MemoryStream())
 			{
@@ -64,15 +69,50 @@ namespace HalfGripTools
 				if (!result.Success)
 				{
 					log.LogError($"{manifest.DisplayName} does not compile:");
+					bool missingType = false;
 					foreach (Diagnostic d in result.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Take(20))
 					{
 						log.LogError("  " + d);
+						missingType |= d.Id == "CS0012" || d.Id == "CS0246" || d.Id == "CS0234";
 						if (errors != null && errors.Count < MaxShownErrors)
 						{
 							errors.Add(Describe(manifest, d));
 						}
 					}
+					if (restricted && missingType)
+					{
+						string hint = "A restricted mod has no access to the game's own classes, Harmony or System.IO: use ctx (Items, Maps, Events, Storage, ...) or set \"trust\" to \"full\".";
+						log.LogError("  " + hint);
+						if (errors != null && errors.Count < MaxShownErrors)
+						{
+							errors.Add(hint);
+						}
+					}
 					return null;
+				}
+				if (restricted)
+				{
+					List<string> refused = RestrictedCheck.Run(manifest, compilation);
+					if (refused.Count > 0)
+					{
+						log.LogError($"{manifest.DisplayName} is a restricted mod and uses what it may not:");
+						foreach (string line in refused.Take(20))
+						{
+							log.LogError("  " + line);
+						}
+						if (errors != null)
+						{
+							foreach (string line in refused.Take(MaxShownErrors))
+							{
+								if (errors.Count < MaxShownErrors)
+								{
+									errors.Add(line);
+								}
+							}
+						}
+						return null;
+					}
+					log.LogInfo($"{manifest.DisplayName}: restricted mod, checked against the allow list");
 				}
 				byte[] bytes = dll.ToArray();
 				foreach (string old in Directory.GetFiles(cacheDir, manifest.id + "-*.dll"))
@@ -151,6 +191,50 @@ namespace HalfGripTools
 			return references;
 		}
 
+		/// <summary>
+		/// What a restricted mod compiles against: the runtime's own libraries, Unity's engine modules and this assembly (the mod API). Not the game's
+		/// assembly, Harmony, Steamworks, Newtonsoft or the compiler.
+		/// </summary>
+		private static List<MetadataReference> RestrictedReferences(ModLog log)
+		{
+			if (restrictedReferences != null)
+			{
+				return restrictedReferences;
+			}
+			restrictedReferences = new List<MetadataReference>();
+			HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			void Add(string path)
+			{
+				string name = Path.GetFileName(path);
+				if (!seen.Add(name))
+				{
+					return;
+				}
+				try
+				{
+					AssemblyName.GetAssemblyName(path);
+					restrictedReferences.Add(MetadataReference.CreateFromFile(path));
+				}
+				catch (BadImageFormatException)
+				{
+				}
+			}
+			string managed = Path.Combine(UnityEngine.Application.dataPath, "Managed");
+			foreach (string path in Directory.GetFiles(managed, "*.dll"))
+			{
+				string name = Path.GetFileNameWithoutExtension(path);
+				bool runtime = name == "mscorlib" || name == "netstandard" || name == "System" || name.StartsWith("System.");
+				bool unity = name.StartsWith("UnityEngine.") || name == "UnityEngine" || name == "Unity.TextMeshPro";
+				if (runtime || unity)
+				{
+					Add(path);
+				}
+			}
+			Add(typeof(Compiler).Assembly.Location);
+			log.LogInfo("Compiler references for restricted mods: " + restrictedReferences.Count + " assemblies");
+			return restrictedReferences;
+		}
+
 		private static string Hash(ModManifest manifest, string[] sourceFiles)
 		{
 			using (SHA256 sha = SHA256.Create())
@@ -158,7 +242,7 @@ namespace HalfGripTools
 				StringBuilder text = new StringBuilder();
 				// The module id of a deterministic build comes from the DLL's content, so any change to HalfGripTools (its API
 				// included) rebuilds every mod, even if the version number stayed the same.
-				text.Append(typeof(Compiler).Module.ModuleVersionId).Append('|').Append(GameHash()).Append('|').Append(manifest.id);
+				text.Append(typeof(Compiler).Module.ModuleVersionId).Append('|').Append(GameHash()).Append('|').Append(manifest.id).Append('|').Append(manifest.trust);
 				byte[] head = Encoding.UTF8.GetBytes(text.ToString());
 				sha.TransformBlock(head, 0, head.Length, null, 0);
 				foreach (string file in sourceFiles.OrderBy(f => f, StringComparer.Ordinal))

@@ -1,0 +1,9 @@
+{
+  "id": "restrictedok",
+  "name": "Restricted OK",
+  "version": "1.0.0",
+  "author": "4l3x4nd3r",
+  "description": "Example of a restricted mod: counts how many times the game started, using ctx.Storage instead of System.IO.",
+  "apiVersion": "2.0.0",
+  "trust": "restricted"
+}

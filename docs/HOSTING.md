@@ -6,7 +6,7 @@ HalfGripTools is one loader (`HalfGripTools.dll`) and a small piece of code, the
 HalfGripTools.dll             the loader: finds mods, compiles them, runs them, mod manager, items, keys, settings, net
    ^  calls                      knows nothing of BepInEx, Harmony or Doorstop
    |
-   +-- GameHooks                 six plain static methods: what the loader needs the game to tell it
+   +-- GameHooks                 a handful of plain static methods: what the loader needs the game to tell it
    +-- IModHost                  how a host gives it a log (and says whether it can patch)
    +-- IPatchProvider            only for hosts that patch the game from outside
 
@@ -27,6 +27,8 @@ Each is one call. From outside, `HalfGripTools.Harmony` patches the place with H
 | `json = GameHooks.RunStatsFit(json)` | end of `RunStats.Fit`, on its result | Adds the list of running mods (`id@version:hash8`) to the anonymous run stats, so runs with mods can be counted. `"mods":[]` in a speedrun. |
 | `GameHooks.CatalogAboutToBeRead()` | start of `UpgradeMapper.Awake` and of `LoadoutProgress.ApplyToNewRun` | Puts the mods' items in the item catalog before the game builds its lookup from it. Safe to call again. |
 | `GameHooks.ControlRows()` | in `Controls.Holder` and `ControlsSettingsUI.Fill`, wherever `Controls.All` is read | The game's controls plus the keys mods added, so they show up in Settings > Controls with the game's own rebinding. Then set `GameHooks.ControlsRedirected = true`. |
+| `GameHooks.LanguageLoaded(lang)` | end of `Loc.Load(string lang)` (private) | Mods add their `lang\<language>.csv` rows to the game's text table (`ctx.Text`). |
+| `GameHooks.Gun*` and `GameHooks.Rack*` (16 calls) | `NAutomaticGun` Awake/Start/Shoot/CanEnterAimMode/IsFull/ShotsLeft, `NPumpActionGun` Awake/Shoot/UpdatePump/PartsAim, `Gun.FireRay` (prefix and finalizer), `MagazineManager` Awake/Start/Grant/Spawn/SpawnEntities | `GunBehaviour` (`ctx.Guns`): a mod's gun is code in a class, not patches. The Harmony provider installs them the first time a mod registers a behaviour (`IPatchProvider.InstallGunHooks`); a host built into the game calls them itself (each comment in `Hooks.cs` says where). |
 
 All of them do nothing while no mods are running, so they can sit in the game's code for good.
 

@@ -253,6 +253,37 @@ The host picks it like any other mode. Every mode is run as a race (laps, finish
 
 If the host changes to a mode that takes fewer players than the room has, the players who joined last start the race as spectators.
 
+### Guns: `GunBehaviour` (since 2.0)
+
+A mod that puts its own gun in the SMG's or shotgun's place needs no patches on the game's gun classes. Make a class that derives from `GunBehaviour`, override the moments you care about, and register it:
+
+```csharp
+internal sealed class MyGun : GunBehaviour
+{
+	public override void AfterStart(Gun gun)
+	{
+		if (gun is NAutomaticGun smg && MyItem.IsFitted(smg)) { MyItem.Equip(smg); }
+	}
+}
+// in Load: ctx.Guns.Add(new MyGun());
+```
+
+Every method gets the game's gun (or magazine rack) it is about and answers only for its own: check `gun.Fitted` against your item and return the default for any other gun. Defaults do nothing and let the game carry on. The moments: `BeforeAwake` (return false to skip the game's Awake), `AfterAwake`, `AfterStart`, `BeforeShoot` (false = no shot), `CanAim`, `IsFull`, `ShotsLeft` (return true after setting `result` to decide it), `AfterUpdatePump`, `AfterPartsAim` (pump gun), `BeforeFireRay` (false = you fired something else; put where it ended in `end`) and `AfterFireRay` (always runs, even if the shot threw), and for the rack `BeforeRackAwake`, `AfterRackStart`, `GrantMagazines`, `SpawnMagazines`, `SpawnMagazineObjects`. Helpers for what the game keeps private: `GunBehaviour.OwnerOf(rack)`, `RackItems`, `EmptyRack`, `CallGun(gun, "FireShot")`, `TryGetAimScreenPoint`. The first behaviour registered in the whole game is what makes the loader put its hooks on the game's gun classes. A gun is still an item: clone one with `ctx.Items.Clone` or make it from JSON (`copyOf` a gun's id and `fields` such as `damage`, `fireRate`, `capacity`, `magazines`). M1911, RPG, SniperRifle, JudgmentDay, Railgun and Minigun are written this way.
+
+### Files and text: `ctx.Storage`, `ctx.Text`
+
+`ctx.Storage` keeps a mod's own files in its folder in the data folder (`ReadText`, `WriteText`, `ReadBytes`, `WriteBytes`, `Exists`, `Delete`, `List`). Names are relative (`"best.json"`, `"runs/last.txt"`): letters, digits, space, `. - _` and `/`, no `..`. A file may hold 1 MB and a mod 20 MB. It is the one way a restricted mod can write anything.
+
+`ctx.Text` translates. Put `lang\<language>.csv` in the mod (the game's language names: `french.csv`, `german.csv`, ...), rows of `English text,translation`, and the loader adds them to the game's text table whenever a language loads and when the mod starts. Use `ctx.Text.T("TEXT")` and `ctx.Text.F("PLAYERS {0} / {1}", a, b)` for what the game would show; a missing row leaves the English.
+
+### Meshes and trees: `HalfGripTools.Meshes`
+
+`Batch` (flat-shaded triangles with a texture and tint, or a flat colour, wound to face a hint direction), `Geo` (polyline helpers for roads) and `Mats` (materials from the Stadium ground's shader), and `TreeSource.Capture(ctx.Log)` (the game's own forest tree models, `TreeSource.Models`). `SpriteMesh.Build` turns a sprite's opaque pixels into the extruded mesh the game's guns use, and `VoxelMesh` does the same for a sprite laid along a model. Add `using HalfGripTools.Meshes;`. Do not copy these into a mod.
+
+## Restricted mods
+
+`"trust": "restricted"` in `mod.json` says the mod only needs the loader's API, and HalfGripTools holds it to that. It compiles with no reference to the game's own assembly, Harmony or Steamworks, with `unsafe` off, and then every name in the source is checked against `HalfGripTools\Restricted\RestrictedApi.txt` (namespaces on an allow list, a few types and members on a deny list). The mod is refused, with file and line, if it uses `System.IO`, `System.Net`, `System.Diagnostics`, `System.Reflection`, `DllImport`, `Type`, `Activator`, `Environment`, `Application.OpenURL`, `ctx.PatchAll` and the like. What is left is C#, the engine's types (`UnityEngine`, `TMPro`) and the loader: `ctx.Log`, `Config`, `Storage`, `Text`, `Events`, `Audio`, `Sprites`, `Net`, `Maps`, the meshes. A data-only mod (items, maps, sprites) has no code and passes. `examples\RestrictedOk` is a restricted mod; `examples\RestrictedFile` is one that is refused on purpose. A restricted mod cannot use the game's classes at all, so gun and item mods that reach into them stay `full` (and labelled so). The check is only as good as the list: it is read, not a sandbox, and the list errs on the side of refusing.
+
 ## Maps
 
 A map has no scene of its own (a mod cannot add one). It is built inside the Stadium scene when its race loads. HalfGripTools does the plumbing, so a map needs no patches:

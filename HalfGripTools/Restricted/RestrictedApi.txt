@@ -1,0 +1,58 @@
+# What a mod with "trust": "restricted" may use. HalfGripTools reads this list after a normal compile and refuses a mod that touches anything
+# outside it, with the file and line. A restricted mod also compiles with no reference to the game's own assembly (Assembly-CSharp), Harmony
+# or Steamworks, and with `unsafe` off, so those are out of reach in the first place.
+#
+#   allow <namespace>     everything in that namespace
+#   allow <namespace>.*   the namespace and all namespaces under it
+#   deny <type>           a type, whatever namespace allows it
+#   deny <type>.<member>  one member of a type
+#   deny <namespace>.*    a namespace and all under it
+# A deny always wins. One thing is not here on purpose: System.IO, System.Net, System.Diagnostics, System.Reflection, System.Runtime.InteropServices
+# and System.Threading are simply not allowed, which is what stops files, network, processes, reflection, native calls and threads.
+# Files go through ctx.Storage (the mod's own folder in the data folder, with size limits).
+
+allow System
+allow System.Collections.*
+allow System.Linq
+allow System.Text
+allow System.Globalization
+allow UnityEngine.*
+allow TMPro
+allow HalfGripTools
+
+# System: reaching other code by name, the machine, the process
+deny System.Activator
+deny System.AppDomain
+deny System.Environment
+deny System.GC
+deny System.Type
+deny System.Object.GetType
+deny System.Delegate.DynamicInvoke
+deny System.Delegate.CreateDelegate
+deny System.Runtime.*
+
+# UnityEngine: leaving the game, the network, loading code or files from outside
+deny UnityEngine.Application.OpenURL
+deny UnityEngine.Application.Quit
+deny UnityEngine.Application.OpenURL
+deny UnityEngine.Networking.*
+deny UnityEngine.Windows.*
+deny UnityEngine.AssetBundle
+deny UnityEngine.Resources.Load
+deny UnityEngine.Resources.LoadAll
+deny UnityEngine.Resources.LoadAsync
+deny UnityEngine.ImageConversion.LoadImage
+deny UnityEngine.Video.*
+deny UnityEngine.Microphone
+deny UnityEngine.WebCam
+deny UnityEngine.Device.*
+deny UnityEngine.Diagnostics.*
+
+# HalfGripTools: patching the game and reaching into it by name
+deny HalfGripTools.ModContext.PatchAll
+deny HalfGripTools.GunBehaviour.CallGun
+deny HalfGripTools.GunBehaviour.CallRack
+deny HalfGripTools.GunBehaviour.RackField
+deny HalfGripTools.GameHooks
+deny HalfGripTools.ModRuntime
+deny HalfGripTools.GunConversion

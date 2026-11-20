@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using UnityEngine;
 
 namespace HalfGripTools
 {
@@ -34,6 +35,9 @@ namespace HalfGripTools
 
 		/// <summary>The hooks mods need: the game's item catalog and the controls list. Only installed when mods are going to run.</summary>
 		void InstallModHooks();
+
+		/// <summary>The hooks of <see cref="GunBehaviour"/> on the gun classes. Installed the first time a mod registers one.</summary>
+		void InstallGunHooks();
 
 		IModPatcher CreatePatcher(string ownerId);
 	}
@@ -115,6 +119,148 @@ namespace HalfGripTools
 		public static void CatalogAboutToBeRead()
 		{
 			ItemInjector.InjectAll();
+		}
+
+		// ---- Guns: where the game's gun classes tell GunBehaviour what happens. Each is called from the patch (or by the game) named in its comment. ----
+
+		/// <summary>Call at the start of <c>NAutomaticGun.Awake</c> and <c>NPumpActionGun.Awake</c>. If this returns false, skip the game's Awake.</summary>
+		public static bool GunBeforeAwake(Gun gun)
+		{
+			return !ModLoader.Running || GunHub.All(b => b.BeforeAwake(gun), "BeforeAwake");
+		}
+
+		/// <summary>Call at the end of <c>NAutomaticGun.Awake</c> and <c>NPumpActionGun.Awake</c>.</summary>
+		public static void GunAfterAwake(Gun gun)
+		{
+			if (ModLoader.Running)
+			{
+				GunHub.Each(b => b.AfterAwake(gun), "AfterAwake");
+			}
+		}
+
+		/// <summary>Call at the end of <c>NAutomaticGun.Start</c>.</summary>
+		public static void GunAfterStart(Gun gun)
+		{
+			if (ModLoader.Running)
+			{
+				GunHub.Each(b => b.AfterStart(gun), "AfterStart");
+			}
+		}
+
+		/// <summary>Call at the start of <c>NAutomaticGun.Shoot</c> and <c>NPumpActionGun.Shoot</c>. If this returns false, skip the game's Shoot.</summary>
+		public static bool GunBeforeShoot(Gun gun)
+		{
+			return !ModLoader.Running || GunHub.All(b => b.BeforeShoot(gun), "BeforeShoot");
+		}
+
+		/// <summary>Call at the start of <c>NAutomaticGun.CanEnterAimMode</c>. If this returns true, return <paramref name="result"/> instead.</summary>
+		public static bool GunCanAim(Gun gun, ref bool result)
+		{
+			bool value = result;
+			bool decided = ModLoader.Running && GunHub.Decide(b => b.CanAim(gun, ref value), "CanAim");
+			result = value;
+			return decided;
+		}
+
+		/// <summary>Call at the start of <c>NAutomaticGun.IsFull</c>. If this returns true, return <paramref name="result"/> instead.</summary>
+		public static bool GunIsFull(Gun gun, ref bool result)
+		{
+			bool value = result;
+			bool decided = ModLoader.Running && GunHub.Decide(b => b.IsFull(gun, ref value), "IsFull");
+			result = value;
+			return decided;
+		}
+
+		/// <summary>Call at the start of <c>NAutomaticGun.ShotsLeft</c>. If this returns true, return <paramref name="result"/> instead.</summary>
+		public static bool GunShotsLeft(Gun gun, ref int result)
+		{
+			int value = result;
+			bool decided = ModLoader.Running && GunHub.Decide(b => b.ShotsLeft(gun, ref value), "ShotsLeft");
+			result = value;
+			return decided;
+		}
+
+		/// <summary>Call at the end of <c>NPumpActionGun.UpdatePump</c>.</summary>
+		public static void GunAfterUpdatePump(NPumpActionGun gun)
+		{
+			if (ModLoader.Running)
+			{
+				GunHub.Each(b => b.AfterUpdatePump(gun), "AfterUpdatePump");
+			}
+		}
+
+		/// <summary>Call at the end of <c>NPumpActionGun.PartsAim</c>, passing what it returned; return value goes back as the result.</summary>
+		public static bool GunAfterPartsAim(NPumpActionGun gun, bool result)
+		{
+			bool value = result;
+			if (ModLoader.Running)
+			{
+				GunHub.Each(b => b.AfterPartsAim(gun, ref value), "AfterPartsAim");
+			}
+			return value;
+		}
+
+		/// <summary>Call at the start of <c>Gun.FireRay</c>. If this returns true, skip the game's FireRay and return <paramref name="result"/>.</summary>
+		public static bool GunBeforeFireRay(Gun gun, Vector3 origin, Vector3 direction, ref Vector3 result)
+		{
+			Vector3 end = result;
+			bool replaced = ModLoader.Running && GunHub.Decide(b => !b.BeforeFireRay(gun, origin, direction, ref end), "BeforeFireRay");
+			result = end;
+			return replaced;
+		}
+
+		/// <summary>Call at the end of <c>Gun.FireRay</c>, also when it threw (a finalizer).</summary>
+		public static void GunAfterFireRay(Gun gun)
+		{
+			if (ModLoader.Running)
+			{
+				GunHub.Each(b => b.AfterFireRay(gun), "AfterFireRay");
+			}
+		}
+
+		/// <summary>Call at the start of <c>MagazineManager.Awake</c>.</summary>
+		public static void RackBeforeAwake(MagazineManager rack)
+		{
+			if (ModLoader.Running)
+			{
+				GunHub.Each(b => b.BeforeRackAwake(rack), "BeforeRackAwake");
+			}
+		}
+
+		/// <summary>Call at the end of <c>MagazineManager.Start</c>.</summary>
+		public static void RackAfterStart(MagazineManager rack)
+		{
+			if (ModLoader.Running)
+			{
+				GunHub.Each(b => b.AfterRackStart(rack), "AfterRackStart");
+			}
+		}
+
+		/// <summary>Call at the start of <c>MagazineManager.Grant</c>. If this returns true, return <paramref name="result"/> instead.</summary>
+		public static bool RackGrant(MagazineManager rack, int magazines, ref int result)
+		{
+			int value = result;
+			bool decided = ModLoader.Running && GunHub.Decide(b => b.GrantMagazines(rack, magazines, ref value), "GrantMagazines");
+			result = value;
+			return decided;
+		}
+
+		/// <summary>Call at the start of <c>MagazineManager.Spawn</c>. If this returns true, return <paramref name="result"/> instead.</summary>
+		public static bool RackSpawn(MagazineManager rack, ref int result)
+		{
+			int value = result;
+			bool decided = ModLoader.Running && GunHub.Decide(b => b.SpawnMagazines(rack, ref value), "SpawnMagazines");
+			result = value;
+			return decided;
+		}
+
+		/// <summary>Call at the start of <c>MagazineManager.SpawnEntities</c>. If this returns true, return <paramref name="result"/> instead.</summary>
+		public static bool RackSpawnEntities(MagazineManager rack, ref int result)
+		{
+			int value = result;
+			bool decided = ModLoader.Running && GunHub.Decide(b => b.SpawnMagazineObjects(rack, ref value), "SpawnMagazineObjects");
+			result = value;
+			return decided;
 		}
 
 		/// <summary>The game's controls plus the keys mods added. Read this wherever the game reads <c>Controls.All</c> to list or look up controls.</summary>

@@ -35,6 +35,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The allow and deny list a restricted mod is checked against (Restricted\RestrictedCheck.cs). -->
+    <EmbeddedResource Include="Restricted\RestrictedApi.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="HalfGripTools.Harmony" />
   </ItemGroup>
 

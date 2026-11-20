@@ -37,6 +37,19 @@ namespace HalfGripTools.HarmonyHost
 			Patch(typeof(LanguageLoadedPatch));
 		}
 
+		public void InstallGunHooks()
+		{
+			foreach (Type type in new[]
+			{
+				typeof(AutoGunAwakePatch), typeof(PumpGunAwakePatch), typeof(AutoGunStartPatch), typeof(AutoGunShootPatch), typeof(PumpGunShootPatch),
+				typeof(AutoGunAimPatch), typeof(AutoGunFullPatch), typeof(AutoGunShotsLeftPatch), typeof(PumpUpdatePatch), typeof(PumpPartsAimPatch),
+				typeof(FireRayPatch), typeof(RackAwakePatch), typeof(RackStartPatch), typeof(RackGrantPatch), typeof(RackSpawnPatch), typeof(RackSpawnEntitiesPatch)
+			})
+			{
+				Patch(type);
+			}
+		}
+
 		public IModPatcher CreatePatcher(string ownerId)
 		{
 			return new HarmonyModPatcher(ownerId);
@@ -139,6 +152,112 @@ namespace HalfGripTools.HarmonyHost
 		{
 			GameHooks.LanguageLoaded(lang);
 		}
+	}
+
+	[HarmonyPatch(typeof(NAutomaticGun), "Awake")]
+	internal static class AutoGunAwakePatch
+	{
+		private static bool Prefix(NAutomaticGun __instance) { return GameHooks.GunBeforeAwake(__instance); }
+
+		private static void Postfix(NAutomaticGun __instance) { GameHooks.GunAfterAwake(__instance); }
+	}
+
+	[HarmonyPatch(typeof(NPumpActionGun), "Awake")]
+	internal static class PumpGunAwakePatch
+	{
+		private static bool Prefix(NPumpActionGun __instance) { return GameHooks.GunBeforeAwake(__instance); }
+
+		private static void Postfix(NPumpActionGun __instance) { GameHooks.GunAfterAwake(__instance); }
+	}
+
+	[HarmonyPatch(typeof(NAutomaticGun), "Start")]
+	internal static class AutoGunStartPatch
+	{
+		private static void Postfix(NAutomaticGun __instance) { GameHooks.GunAfterStart(__instance); }
+	}
+
+	[HarmonyPatch(typeof(NAutomaticGun), nameof(NAutomaticGun.Shoot))]
+	internal static class AutoGunShootPatch
+	{
+		private static bool Prefix(NAutomaticGun __instance) { return GameHooks.GunBeforeShoot(__instance); }
+	}
+
+	[HarmonyPatch(typeof(NPumpActionGun), nameof(NPumpActionGun.Shoot))]
+	internal static class PumpGunShootPatch
+	{
+		private static bool Prefix(NPumpActionGun __instance) { return GameHooks.GunBeforeShoot(__instance); }
+	}
+
+	[HarmonyPatch(typeof(NAutomaticGun), "CanEnterAimMode")]
+	internal static class AutoGunAimPatch
+	{
+		private static bool Prefix(NAutomaticGun __instance, ref bool __result) { return !GameHooks.GunCanAim(__instance, ref __result); }
+	}
+
+	[HarmonyPatch(typeof(NAutomaticGun), "IsFull")]
+	internal static class AutoGunFullPatch
+	{
+		private static bool Prefix(NAutomaticGun __instance, ref bool __result) { return !GameHooks.GunIsFull(__instance, ref __result); }
+	}
+
+	[HarmonyPatch(typeof(NAutomaticGun), "ShotsLeft")]
+	internal static class AutoGunShotsLeftPatch
+	{
+		private static bool Prefix(NAutomaticGun __instance, ref int __result) { return !GameHooks.GunShotsLeft(__instance, ref __result); }
+	}
+
+	[HarmonyPatch(typeof(NPumpActionGun), "UpdatePump")]
+	internal static class PumpUpdatePatch
+	{
+		private static void Postfix(NPumpActionGun __instance) { GameHooks.GunAfterUpdatePump(__instance); }
+	}
+
+	[HarmonyPatch(typeof(NPumpActionGun), "PartsAim")]
+	internal static class PumpPartsAimPatch
+	{
+		private static void Postfix(NPumpActionGun __instance, ref bool __result) { __result = GameHooks.GunAfterPartsAim(__instance, __result); }
+	}
+
+	[HarmonyPatch(typeof(Gun), "FireRay")]
+	internal static class FireRayPatch
+	{
+		private static bool Prefix(Gun __instance, UnityEngine.Vector3 origin, UnityEngine.Vector3 direction, ref UnityEngine.Vector3 __result)
+		{
+			return !GameHooks.GunBeforeFireRay(__instance, origin, direction, ref __result);
+		}
+
+		// A finalizer, so it runs even when the shot threw or a prefix skipped the game's code.
+		private static void Finalizer(Gun __instance) { GameHooks.GunAfterFireRay(__instance); }
+	}
+
+	[HarmonyPatch(typeof(MagazineManager), "Awake")]
+	internal static class RackAwakePatch
+	{
+		private static void Prefix(MagazineManager __instance) { GameHooks.RackBeforeAwake(__instance); }
+	}
+
+	[HarmonyPatch(typeof(MagazineManager), "Start")]
+	internal static class RackStartPatch
+	{
+		private static void Postfix(MagazineManager __instance) { GameHooks.RackAfterStart(__instance); }
+	}
+
+	[HarmonyPatch(typeof(MagazineManager), nameof(MagazineManager.Grant))]
+	internal static class RackGrantPatch
+	{
+		private static bool Prefix(MagazineManager __instance, int magazines, ref int __result) { return !GameHooks.RackGrant(__instance, magazines, ref __result); }
+	}
+
+	[HarmonyPatch(typeof(MagazineManager), "Spawn")]
+	internal static class RackSpawnPatch
+	{
+		private static bool Prefix(MagazineManager __instance, ref int __result) { return !GameHooks.RackSpawn(__instance, ref __result); }
+	}
+
+	[HarmonyPatch(typeof(MagazineManager), "SpawnEntities")]
+	internal static class RackSpawnEntitiesPatch
+	{
+		private static bool Prefix(MagazineManager __instance, ref int __result) { return !GameHooks.RackSpawnEntities(__instance, ref __result); }
 	}
 
 	[HarmonyPatch(typeof(RunState), nameof(RunState.BeginRace))]

@@ -74,8 +74,14 @@ namespace HalfGripTools
 		/// <summary>Translations from <c>lang\&lt;language&gt;.csv</c> in the mod folder, merged into the game's own text table (2.0).</summary>
 		public ModText Text { get; }
 
+		/// <summary>The mod's own files in its folder in the data folder, with size limits: the way a restricted mod keeps anything (2.0).</summary>
+		public ModStorage Storage { get; }
+
 		/// <summary>Things that happen in the game (a race started, a lap done, a kill, a wreck, a shot) as C# events, so a simple mod needs no patch (2.0).</summary>
 		public ModEvents Events { get; }
+
+		/// <summary>Registers the behaviour of a mod's gun (<see cref="GunBehaviour"/>), so a gun needs no patches on the game's gun classes (2.0).</summary>
+		public ModGuns Guns { get; }
 
 		/// <summary>Adds race maps built from code (<see cref="MapInfo"/>). A mod folder with a <c>maps</c> folder of map files needs no code at all.</summary>
 		public ModMaps Maps { get; }
@@ -96,6 +102,8 @@ namespace HalfGripTools
 			Events.Join();
 			Audio = new ModAudio(this);
 			Text = new ModText(this);
+			Storage = new ModStorage(this);
+			Guns = new ModGuns(this);
 		}
 
 		/// <summary>
@@ -154,6 +162,7 @@ namespace HalfGripTools
 			Maps.RemoveAll();
 			Events.RemoveAll();
 			Audio.Clear();
+			Guns.RemoveAll();
 		}
 	}
 }
