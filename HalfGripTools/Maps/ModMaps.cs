@@ -102,6 +102,9 @@ namespace HalfGripTools
 		private const float StadiumLap = 1457f;
 
 		private static readonly List<MapInfo> infos = new List<MapInfo>();
+		/// <summary>Track ids that maps already in players' hands use, kept free for them.</summary>
+		private static readonly int[] Reserved = { 20, 21 };
+
 		private static Dictionary<string, int> ids;
 		private static MapDefinition host;
 		private static int hostTrack;
@@ -267,6 +270,8 @@ namespace HalfGripTools
 			}
 			else
 			{
+				// A map with no preference must not take an id a shipped map asks for (Highway 20, Temple of Drift 21): it may load first.
+				used.UnionWith(Reserved);
 				id = Enumerable.Range(20, 12).Concat(Enumerable.Range(5, 15)).FirstOrDefault(i => !used.Contains(i));
 				if (id == 0)
 				{
